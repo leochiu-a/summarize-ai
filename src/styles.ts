@@ -80,22 +80,39 @@ export const styles = `
   .resummarize {
     all: unset;
     cursor: pointer;
-    color: #6b6980;
-    font-size: 15px;
-    line-height: 1;
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     display: grid;
     place-items: center;
     border-radius: 50%;
-    transition: transform .3s ease, background .12s ease, color .12s ease;
+    anchor-name: --resummarize-anchor;
+    transition: transform .12s ease, background .12s ease;
   }
-  .resummarize:hover {
-    background: #00b3d122;
-    color: #008cad;
-    transform: rotate(180deg);
+  .resummarize:hover { background: #26243a11; transform: scale(1.12); }
+  .resummarize:active { transform: scale(.9); }
+  /* 預設靜態 SVG，hover 播放動畫 webp（同反應 emoji 的機制，尺寸較小） */
+  .resummarize .reaction-static,
+  .resummarize .reaction-anim { width: 18px; height: 18px; }
+  .resummarize:hover .reaction-static { display: none; }
+  .resummarize:hover .reaction-anim { display: block; }
+
+  /* tooltip：Popover API（top layer）+ CSS anchor positioning，錨在按鈕上方 */
+  .tooltip {
+    margin: 0;
+    border: 0;
+    padding: 4px 9px;
+    background: #26243a;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    border-radius: 6px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+    position: fixed;
+    position-anchor: --resummarize-anchor;
+    position-area: top;
+    margin-bottom: 8px;
   }
-  .resummarize:active { transform: rotate(360deg); }
   .error { color: #d14343; }
 
   /* 思考時的碎念：斜體灰字，字尾三個點依序閃動 */

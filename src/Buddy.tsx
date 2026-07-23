@@ -8,13 +8,34 @@ import { useTalkingMouth } from './hooks/useTalkingMouth'
 import { useThinkingChatter } from './hooks/useThinkingChatter'
 import { escapeHtml } from './lib/summarizer'
 
+const boltSvg = chrome.runtime.getURL('assets/emoji/26a1.svg')
+const boltWebp = chrome.runtime.getURL('assets/emoji/26a1.webp')
+
 export function Buddy() {
   const { phase, markdown, error, fromCache, summarize, close } = useSummarizer()
   const reactions = useReactions()
   const chatter = useThinkingChatter(phase === 'thinking')
   const frame = useTalkingMouth(phase === 'thinking' || phase === 'speaking' || reactions.reacting)
   const bubbleRef = useRef<HTMLDivElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
   const busy = phase === 'thinking' || phase === 'speaking'
+
+  // tooltip 用 Popover API（渲染在 top layer，不會被泡泡的 overflow 裁掉）
+  // hint 型 popover 沒有宣告式 hover 觸發，改用 hover / focus 手動開關
+  const showTip = useCallback(() => {
+    try {
+      tooltipRef.current?.showPopover()
+    } catch {
+      /* 已開啟時 showPopover 會丟例外，忽略 */
+    }
+  }, [])
+  const hideTip = useCallback(() => {
+    try {
+      tooltipRef.current?.hidePopover()
+    } catch {
+      /* 已關閉時忽略 */
+    }
+  }, [])
 
   // 串流時自動捲到底
   useEffect(() => {
@@ -55,12 +76,19 @@ export function Buddy() {
                   <button
                     type="button"
                     className="resummarize"
-                    aria-label="重新摘要"
-                    title="重新摘要"
+                    aria-label="重新抓取"
                     onClick={resummarize}
+                    onMouseEnter={showTip}
+                    onMouseLeave={hideTip}
+                    onFocus={showTip}
+                    onBlur={hideTip}
                   >
-                    ↻
+                    <img className="reaction-static" src={boltSvg} alt="" aria-hidden="true" />
+                    <img className="reaction-anim" src={boltWebp} alt="" aria-hidden="true" loading="lazy" />
                   </button>
+                  <div ref={tooltipRef} className="tooltip" popover="hint" role="tooltip">
+                    重新抓取
+                  </div>
                 </span>
               )}
             </div>

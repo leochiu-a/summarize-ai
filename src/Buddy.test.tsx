@@ -150,7 +150,7 @@ describe('Buddy 快取', () => {
     await screen.findByRole('button', { name: '讚' })
     expect(calls.create).toBe(1)
 
-    fireEvent.click(screen.getByRole('button', { name: '重新摘要' }))
+    fireEvent.click(screen.getByRole('button', { name: '重新抓取' }))
     await waitFor(() => expect(calls.create).toBe(2))
   })
 })
