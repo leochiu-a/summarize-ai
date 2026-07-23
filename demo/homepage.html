@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><meta charset="UTF-8"><title>旅遊平台首頁（測試非文章 + 垃圾過濾）</title></head>
+<body>
+  <header><a href="#">首頁</a> <a href="#">目的地</a> <a href="#">機票</a> <a href="#">住宿</a></header>
+  <nav>東京 大阪 曼谷 首爾 沖繩 釜山 巴黎 倫敦 洛杉磯 雪梨</nav>
+
+  <!-- 模擬 cookie 同意彈窗（role=dialog 應被移除） -->
+  <div role="dialog"><p>本網站使用 Cookie 以提供個人化內容，繼續使用即表示同意我們的 Cookie 政策。</p><button>接受</button></div>
+
+  <!-- 模擬隱藏的 SEO/離屏內容（display:none 應被移除） -->
+  <div style="display:none">隱藏關鍵字 廉價機票 便宜住宿 促銷代碼 折扣 優惠 SEO 塞字塞字塞字塞字塞字塞字塞字塞字</div>
+
+  <main>
+    <h1>探索世界，從一趟說走就走的旅程開始</h1>
+    <p>我們提供全球超過八十個國家、上萬種當地體驗，從門票、機票、住宿到交通接送，一站式搞定你的旅遊規劃。無論是東京的深度文化之旅、曼谷的美食探險，還是沖繩的親子海島假期，都能在這裡找到最適合的行程。</p>
+    <div class="grid">
+      <div class="card"><h3>東京鐵塔門票</h3><span>NT$450</span></div>
+      <div class="card"><h3>大阪環球影城</h3><span>NT$2,100</span></div>
+      <div class="card"><h3>首爾樂天世界</h3><span>NT$980</span></div>
+      <div class="card"><h3>沖繩美麗海水族館</h3><span>NT$620</span></div>
+    </div>
+  </main>
+
+  <footer>關於我們 聯絡我們 隱私權政策 Cookie 設定 客服中心 © 2026 版權所有</footer>
+
+  <!-- 模擬 Nuxt/Next hydration 的大量 JSON 資料（script 內，innerText 本來就不含，且會被移除） -->
+  <script id="__NUXT_DATA__" type="application/json">{"state":{"products":[{"id":1,"name":"東京鐵塔門票","price":450,"reviews":9821},{"id":2,"name":"大阪環球影城","price":2100}],"user":null,"locale":"zh-tw","garbage":"這段 JSON 絕對不該出現在摘要輸入裡"}}</script>
+  <script>
+    window.__NUXT__ = { data: { junk: '這也是框架垃圾，不該進摘要' } };
+    window.chrome = window.chrome || {};
+    chrome.runtime = { getURL: (p) => p };
+    window.Summarizer = { availability: async () => 'available', create: async () => ({ summarizeStreaming: () => ({ [Symbol.asyncIterator]() { return { next: () => Promise.resolve({ done: true }) }; } }), destroy() {} }) };
+  </script>
+  <script src="content.js?v=13"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import snarkdown from 'snarkdown'
-import { escapeHtml, extractPageText, pickOutputLanguage } from './lib/summarizer'
+import { escapeHtml, extractContent, pickOutputLanguage } from './lib/summarizer'
 import { FRAMES } from './styles'
 
 type Phase = 'idle' | 'thinking' | 'speaking' | 'done' | 'error'
@@ -78,6 +78,14 @@ export function Buddy() {
         return
       }
 
+      // 先抽內容；整頁幾乎沒文字才放棄，別浪費時間啟動模型
+      const article = extractContent()
+      if (!article) {
+        setPhase('error')
+        setStatusText('這頁我抓不到足夠的文字內容，換一頁再試試看吧。')
+        return
+      }
+
       setPhase('thinking')
 
       const createOptions = {
@@ -93,15 +101,8 @@ export function Buddy() {
         summarizer = await Summarizer.create(createOptions)
       }
 
-      const text = extractPageText()
-      if (text.length < 200) {
-        setPhase('error')
-        setStatusText('這個頁面的文字內容太少，沒什麼好摘要的。')
-        return
-      }
-
-      const stream = summarizer.summarizeStreaming(text, {
-        context: '這是一個網頁的內文，請整理重點給讀者。',
+      const stream = summarizer.summarizeStreaming(article.text, {
+        context: `文章標題：「${article.title}」。這是網頁的內文，請整理重點給讀者。`,
       })
 
       // 收到第一個 chunk 才從「思考中」切換成「講話中」
