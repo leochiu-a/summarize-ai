@@ -52,18 +52,32 @@ https://github.com/leochiu-a/summarize-ai
 
 ## Permission justification（權限用途說明）
 
-審核時會針對 `<all_urls>` host permission 要求說明用途，可直接照這段回：
+開發者後台會**針對每個宣告的權限各自要求一段說明**（各自獨立的文字框，上限 1000 字元），
+不是合併成一段。
+
+### Host permission justification（對應 `<all_urls>`）
 
 ```text
 This extension displays an interactive avatar in the corner of every page and,
-only when the user clicks it, reads the current page's visible text content to
-generate a summary using Chrome's built-in on-device Summarizer API. Because
-the avatar and summarization feature must work on any website the user
-chooses to visit, the extension requests access to all URLs. No page content
-is transmitted anywhere — summarization runs entirely on-device. The
-"storage" permission is used only to save the user's local settings
-(tone, summary type, auto-run toggle) and a short-lived (30-minute) local
-cache of generated summaries, both via chrome.storage.local.
+only when the user clicks it, reads the current page's visible text content
+to generate a summary using Chrome's built-in on-device Summarizer API.
+Because the avatar and summarization feature must work on any website the
+user chooses to visit, the extension requests access to all URLs. No page
+content is transmitted anywhere — summarization runs entirely on-device.
+```
+
+### storage justification（對應 `"permissions": ["storage"]`）
+
+```text
+The storage permission is used to save the user's own preferences locally
+via chrome.storage.local: their chosen tone (humorous, serious, gentle,
+passionate, cynical, literary), summary type (key points, TL;DR, teaser,
+headline), and whether to auto-summarize every page. It also stores a
+short-lived (30-minute) local cache of previously generated summaries,
+keyed by page URL, so revisiting the same page doesn't unnecessarily
+re-run the on-device AI model. All of this data stays on the user's
+device via chrome.storage.local — nothing is transmitted to any server,
+and it is cleared automatically when the extension is removed.
 ```
 
 ## Privacy policy URL
