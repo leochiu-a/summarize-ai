@@ -24,7 +24,11 @@ npm install
 npm run build        # 產出 dist/
 npm run dev          # watch mode
 npm run typecheck    # tsc --noEmit
+npm test             # vitest（jsdom 環境）
+npm run test:watch   # vitest watch
 ```
+
+測試涵蓋內容擷取邏輯（`src/lib/summarizer.test.ts`）：Readability 抽正文、非文章頁的垃圾過濾、輸入截斷與工具函式。
 
 使用 [Vite Plus](https://viteplus.dev) 打包，content script（含 React runtime）輸出為單一 IIFE（`dist/content.js`）。UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾。
 

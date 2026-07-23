@@ -4,10 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vp test run",
     "build": "vp build",
     "dev": "vp build --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:watch": "vp test"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +19,7 @@
     "@types/dom-chromium-ai": "^0.0.17",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.1.1",
     "typescript": "^7.0.2",
     "vite-plus": "^0.2.6"
   },

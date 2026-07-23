@@ -73,7 +73,8 @@ const NOISE_SELECTOR = [
 ].join(',')
 
 // 擷取整頁可見文字，濾掉框架資料與導覽/彈窗等一定不是內文的東西
-function extractVisibleText(): string {
+// （匯出供測試：這是非文章頁的過濾邏輯本體）
+export function extractVisibleText(): string {
   const clone = document.body.cloneNode(true) as HTMLElement
   clone.querySelectorAll(NOISE_SELECTOR).forEach((el) => el.remove())
   // 分離節點上 innerText 偶爾為空，退回 textContent 保底
