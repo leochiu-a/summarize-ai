@@ -8,7 +8,8 @@
     "build": "vp build && vp build --config vite.popup.config.ts",
     "dev": "vp build --watch",
     "typecheck": "tsc --noEmit",
-    "test:watch": "vp test"
+    "test:watch": "vp test",
+    "package": "npm run typecheck && npm test && npm run build && web-ext build --source-dir dist --artifacts-dir release --overwrite-dest"
   },
   "keywords": [],
   "author": "",
@@ -24,7 +25,8 @@
     "@types/react-dom": "^19.2.3",
     "jsdom": "^29.1.1",
     "typescript": "^7.0.2",
-    "vite-plus": "^0.2.6"
+    "vite-plus": "^0.2.6",
+    "web-ext": "^10.5.0"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

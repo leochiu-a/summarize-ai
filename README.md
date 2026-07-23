@@ -54,6 +54,16 @@ npm run test:watch   # vitest watch
 3. 點「載入未封裝項目」，選擇本專案的 `dist/` 資料夾
 4. 打開任何頁面，右下角就會出現小夥伴，點他開始摘要
 
+## 打包成 zip（上架 / 分發）
+
+```bash
+npm run package
+```
+
+依序跑 typecheck → 測試 → build，最後用 [web-ext](https://github.com/mozilla/web-ext) 把 `dist/` 打包成 `release/summarize_ai_buddy-<version>.zip`（版本號讀自 `manifest.json`）。這個 zip 可以直接上傳到 [Chrome Web Store 開發者後台](https://chrome.google.com/webstore/devconsole)，或分享給別人手動安裝。`release/` 已列入 `.gitignore`，每次執行都會用 `--overwrite-dest` 覆蓋舊檔。
+
+要發新版本前，記得先更新 `public/manifest.json` 的 `version` 欄位。
+
 ## 本機預覽（免安裝 extension）
 
 `demo/` 底下有測試頁，stub 掉 `chrome.runtime` 與 `Summarizer`，可直接開 `demo/index.html`（文章頁）或 `demo/homepage.html`（非文章頁 + 垃圾過濾）看 UI 與擷取行為。需先 `npm run build`（demo 的 `content.js` 由 `dist/` 複製而來，已列入 `.gitignore`）。
