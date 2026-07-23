@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# demo build artifacts（由 dist 複製而來，需 build 產生）
+demo/content.js
+demo/assets/
+
+# macOS
+.DS_Store
+
+# logs
+npm-debug.log*

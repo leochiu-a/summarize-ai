@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Summarize AI Buddy — Demo</title>
+<style>
+  body { font-family: -apple-system, "PingFang TC", sans-serif; max-width: 720px; margin: 40px auto; line-height: 1.8; color: #222; padding: 0 20px; }
+  h1 { font-size: 28px; }
+</style>
+</head>
+<body>
+<article>
+  <h1>台灣自由行完整攻略：從台北到墾丁的十天行程</h1>
+  <p>台灣是一個非常適合自由行的目的地，交通便利、美食豐富、人情味濃厚。這篇文章整理了一條從台北出發、一路南下到墾丁的十天行程，涵蓋交通、住宿、景點與美食推薦。</p>
+  <p>第一站台北，建議安排三天。必訪景點包括故宮博物院、大稻埕、象山步道夜景，晚上可以到寧夏夜市或饒河街夜市覓食。交通上使用悠遊卡搭配捷運與公車即可涵蓋大部分景點。</p>
+  <p>第二站台中，高鐵從台北出發約一小時。審計新村、國家歌劇院、高美濕地夕陽都是熱門選擇。台中的宮原眼科冰淇淋與第二市場的在地小吃也不容錯過。</p>
+  <p>第三站台南，古都的巷弄文化與小吃是重點。神農街、安平古堡、奇美博物館，加上牛肉湯、蝦捲、碗粿，兩天的行程可以排得非常充實。</p>
+  <p>最後一站墾丁，從高雄轉乘墾丁快線約兩小時。南灣戲水、鵝鑾鼻燈塔、龍磐公園看日出，行程以放鬆為主。回程可在高雄停留半天，逛駁二藝術特區與旗津海岸。</p>
+  <p>整體預算方面，十天行程含住宿、交通與餐飲，每人約三萬五千元台幣起，若選擇青年旅館與夜市美食可以再壓低。建議避開連假與暑假旺季，住宿價格差距可達一倍以上。</p>
+</article>
+
+<script>
+// ---- stub chrome.runtime（demo 環境沒有 extension runtime）----
+window.chrome = window.chrome || {};
+chrome.runtime = { getURL: (path) => path };
+
+// ---- stub Summarizer API：模擬模型串流輸出 ----
+window.Summarizer = {
+  availability: async () => 'available',
+  create: async () => ({
+    summarizeStreaming: (text) => {
+      const summary = '這篇文章介紹**台灣十天自由行**攻略：\n\n' +
+        '* 台北三天：故宮、大稻埕、象山夜景與夜市美食\n' +
+        '* 台中：審計新村、歌劇院、高美濕地夕陽\n' +
+        '* 台南兩天：古蹟巷弄與`牛肉湯`等在地小吃\n' +
+        '* 墾丁：南灣、鵝鑾鼻，行程以放鬆為主\n' +
+        '* 預算每人約 **3.5 萬台幣**起，建議避開旺季';
+      const chunks = summary.match(/.{1,6}/gs) || [];
+      let i = 0;
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            next: () => new Promise((resolve) => {
+              // 第一個 chunk 前模擬真實模型的思考延遲
+              const delay = i === 0 ? 2500 : 120;
+              setTimeout(() => {
+                i < chunks.length
+                  ? resolve({ value: chunks[i++], done: false })
+                  : resolve({ value: undefined, done: true });
+              }, delay);
+            }),
+          };
+        },
+      };
+    },
+    destroy() {},
+  }),
+};
+</script>
+<script src="content.js?v=8"></script>
+</body>
+</html>

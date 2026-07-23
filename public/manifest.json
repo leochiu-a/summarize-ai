@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Summarize AI Buddy",
+  "version": "1.0.0",
+  "description": "在網頁右下角召喚 pixel 小夥伴，用 Chrome 內建 Summarizer API 幫你摘要頁面內容",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/sprite.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "128": "assets/icon128.png"
+  }
+}
