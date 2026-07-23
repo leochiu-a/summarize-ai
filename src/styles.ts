@@ -51,14 +51,51 @@ export const styles = `
   .bubble::-webkit-scrollbar { width: 8px; }
   .bubble::-webkit-scrollbar-thumb { background: #26243a55; border-radius: 4px; }
 
+  .bubble-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
   .title {
     font-weight: 700;
     font-size: 13px;
     letter-spacing: .08em;
     color: #00b3d1;
-    margin-bottom: 8px;
     text-transform: uppercase;
   }
+  .bubble-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cache-badge {
+    font-size: 11px;
+    color: #6b6980;
+    background: #26243a11;
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+  .resummarize {
+    all: unset;
+    cursor: pointer;
+    color: #6b6980;
+    font-size: 15px;
+    line-height: 1;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    transition: transform .3s ease, background .12s ease, color .12s ease;
+  }
+  .resummarize:hover {
+    background: #00b3d122;
+    color: #008cad;
+    transform: rotate(180deg);
+  }
+  .resummarize:active { transform: rotate(360deg); }
   .error { color: #d14343; }
 
   /* 思考時的碎念：斜體灰字，字尾三個點依序閃動 */

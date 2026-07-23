@@ -15,7 +15,8 @@ Chrome extension：網頁右下角會出現一個 pixel 小夥伴，點他就會
    - **文章頁**：用 [Readability](https://github.com/mozilla/readability)（Firefox 閱讀模式核心）抽出乾淨正文。`charThreshold` 調低到 250 以相容中文短段落（資訊密度高、字數少，用預設 500 會被誤判成非文章）。
    - **非文章頁**（首頁、列表頁、應用程式）：Readability 抽不到正文時，退回擷取整頁可見文字，並移除高信心雜訊——框架 hydration 資料（`<script>`、`type="application/json"`，例如 Nuxt / Next 的 JSON blob）、導覽/頁尾（`nav`/`header`/`footer`/`aside` 與對應 ARIA role）、cookie 彈窗（`role="dialog"`）、隱藏元素（`aria-hidden` / `hidden` / inline `display:none`）。只用標籤與 role 判斷，不猜 class 名稱，避免誤殺真內容。
    - 內文截斷在 16000 字（Summarizer 輸入額度）。
-2. **串流摘要**（[`src/Buddy.tsx`](src/Buddy.tsx)）：呼叫 `Summarizer.summarizeStreaming()`，狀態機 `idle → thinking → speaking → done`。等待第一個 chunk 時輪播碎念台詞、嘴巴同步開合；收到內容後即時以 [snarkdown](https://github.com/developit/snarkdown) 渲染 markdown。
+2. **查快取**（[`src/lib/summaryCache.ts`](src/lib/summaryCache.ts)）：同一個網址半小時內重開，直接用快取、跳過模型（顯示「快取」標記）。存在 `chrome.storage.local`（跨分頁、跨重新整理），測試 / demo 無此 API 時退回記憶體。
+3. **串流摘要**（[`src/hooks/useSummarizer.ts`](src/hooks/useSummarizer.ts)）：呼叫 `Summarizer.summarizeStreaming()`，狀態機 `idle → thinking → speaking → done`。等待第一個 chunk 時輪播碎念台詞、嘴巴同步開合；收到內容後即時以 [snarkdown](https://github.com/developit/snarkdown) 渲染 markdown，完成後寫入快取。標題列的 ↻ 可強制重新摘要（略過快取）。
 
 ## 開發
 
@@ -48,11 +49,20 @@ npm run test:watch   # vitest watch
 ## 結構
 
 ```
-public/manifest.json      # MV3 manifest（原樣複製進 dist）
-public/assets/sprite.png  # 3 格 sprite sheet（閉嘴 / 半開 / 張嘴）
-src/content.tsx           # 進入點：建 Shadow DOM host、掛載 React
-src/Buddy.tsx             # 主元件：狀態機 + Summarizer 串流 + 講話動畫
-src/lib/summarizer.ts     # 內容擷取（Readability + 過濾式全頁擷取）與工具
-src/styles.ts             # Shadow DOM 樣式
-vite.config.ts            # IIFE 打包設定
+public/manifest.json          # MV3 manifest（原樣複製進 dist）
+public/assets/sprite.png      # 3 格 sprite sheet（閉嘴 / 半開 / 張嘴）
+public/assets/emoji/          # 反應 emoji：靜態 .svg + 動畫 .webp（Noto）
+src/content.tsx               # 進入點：建 Shadow DOM host、掛載 React
+src/Buddy.tsx                 # 編排層：組合 hooks 與子元件、bubble 版面
+src/components/Avatar.tsx     # 小夥伴頭像（sprite 嘴型）
+src/components/ReactionBar.tsx# 反應 emoji 列
+src/hooks/useSummarizer.ts    # 摘要流程 + 狀態機 + 快取
+src/hooks/useThinkingChatter.ts # 思考碎念輪播 + 不耐煩回應
+src/hooks/useTalkingMouth.ts  # 講話嘴型動畫
+src/hooks/useReactions.ts     # emoji 反應狀態
+src/lib/summarizer.ts         # 內容擷取（Readability + 過濾式全頁擷取）
+src/lib/summaryCache.ts       # 半小時頁面摘要快取
+src/lib/reactions.ts          # 反應 emoji 資料
+src/styles.ts                 # Shadow DOM 樣式
+vite.config.ts                # IIFE 打包設定
 ```

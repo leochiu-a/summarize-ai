@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Buddy } from './Buddy'
+import { clearSummaryCache } from './lib/summaryCache'
 
 // 用一段夠長的文章塞進頁面，讓 extractContent 抽得到內容（需超過長度門檻）
 function seedArticle() {
@@ -12,15 +13,20 @@ function seedArticle() {
   document.body.insertAdjacentHTML('afterbegin', `<article><h1>測試文章</h1>${paras}</article>`)
 }
 
-// 建立可控的 Summarizer stub：streamFactory 決定串流吐出什麼
+// 建立可控的 Summarizer stub：streamFactory 決定串流吐出什麼，並記錄呼叫次數
 function stubSummarizer(streamFactory: () => AsyncIterable<string>) {
+  const calls = { create: 0 }
   vi.stubGlobal('Summarizer', {
     availability: async () => 'available',
-    create: async () => ({
-      summarizeStreaming: () => streamFactory(),
-      destroy: () => {},
-    }),
+    create: async () => {
+      calls.create += 1
+      return {
+        summarizeStreaming: () => streamFactory(),
+        destroy: () => {},
+      }
+    },
   })
+  return calls
 }
 
 // 永不吐出的串流 → 停在 thinking 狀態
@@ -37,10 +43,11 @@ function chunkStream(chunks: string[]): () => AsyncIterable<string> {
 
 const avatar = () => screen.getByRole('button', { name: '點我摘要這個頁面' })
 
-afterEach(() => {
+afterEach(async () => {
   cleanup()
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
+  await clearSummaryCache() // 快取以記憶體 fallback 保存，測試間需清掉
 })
 
 describe('Buddy 狀態機', () => {
@@ -111,5 +118,39 @@ describe('Buddy emoji 反應', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '爛' }))
     expect(await screen.findByText('「蛤？我可是很認真讀的欸」')).toBeTruthy()
+  })
+})
+
+describe('Buddy 快取', () => {
+  it('半小時內重開同一頁用快取，不再呼叫模型', async () => {
+    seedArticle()
+    const calls = stubSummarizer(chunkStream(['台灣自由行攻略']))
+    render(<Buddy />)
+
+    // 第一次：跑模型
+    fireEvent.click(avatar())
+    await screen.findByRole('button', { name: '讚' })
+    expect(calls.create).toBe(1)
+    expect(screen.queryByText('快取')).toBeNull()
+
+    // 收合再重開：命中快取，不再呼叫模型，且顯示「快取」標記
+    fireEvent.click(avatar()) // close
+    fireEvent.click(avatar()) // reopen
+    await screen.findByText('快取')
+    expect(calls.create).toBe(1)
+    expect(screen.getByText(/台灣自由行攻略/)).toBeTruthy()
+  })
+
+  it('按重新摘要會略過快取、強制重跑', async () => {
+    seedArticle()
+    const calls = stubSummarizer(chunkStream(['重新摘要的內容']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+    await screen.findByRole('button', { name: '讚' })
+    expect(calls.create).toBe(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '重新摘要' }))
+    await waitFor(() => expect(calls.create).toBe(2))
   })
 })
