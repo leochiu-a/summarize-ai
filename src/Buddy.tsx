@@ -18,13 +18,25 @@ const THINKING_LINES = [
   '再給我一秒鐘就好',
 ]
 
+// 思考時被一直點，回一句不耐煩的話
+const IMPATIENT_LINES = [
+  '欸，我還在看啦，別催',
+  '好啦好啦，馬上就好',
+  '再點我也不會變快喔',
+  '拜託，讓我專心一下',
+  '你越催我會越慢喔 😤',
+]
+
 export function Buddy() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [bubbleOpen, setBubbleOpen] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [markdown, setMarkdown] = useState('')
   const [frame, setFrame] = useState(0)
+  const [impatient, setImpatient] = useState<string | null>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
+  const impatientIdx = useRef(0)
+  const impatientTimer = useRef<number | null>(null)
   const busy = phase === 'thinking' || phase === 'speaking'
 
   // 講話動畫：thinking（碎念）和 speaking（唸摘要）時都在動嘴
@@ -43,7 +55,15 @@ export function Buddy() {
 
   // 思考時輪播碎念台詞
   useEffect(() => {
-    if (phase !== 'thinking') return
+    if (phase !== 'thinking') {
+      // 離開思考狀態就清掉不耐煩的話
+      setImpatient(null)
+      if (impatientTimer.current !== null) {
+        clearTimeout(impatientTimer.current)
+        impatientTimer.current = null
+      }
+      return
+    }
     let i = 0
     setStatusText(THINKING_LINES[0])
     const timer = setInterval(() => {
@@ -128,6 +148,15 @@ export function Buddy() {
   }, [])
 
   const handleAvatarClick = useCallback(() => {
+    // 思考中被催 → 回一句不耐煩的話，暫時蓋過碎念
+    if (phase === 'thinking') {
+      const line = IMPATIENT_LINES[impatientIdx.current % IMPATIENT_LINES.length]
+      impatientIdx.current += 1
+      setImpatient(line)
+      if (impatientTimer.current !== null) clearTimeout(impatientTimer.current)
+      impatientTimer.current = window.setTimeout(() => setImpatient(null), 2200)
+      return
+    }
     if (busy) return
     if (bubbleOpen) {
       setBubbleOpen(false)
@@ -135,7 +164,7 @@ export function Buddy() {
       return
     }
     void summarize()
-  }, [busy, bubbleOpen, summarize])
+  }, [phase, busy, bubbleOpen, summarize])
 
   return (
     <div className="buddy">
@@ -143,7 +172,11 @@ export function Buddy() {
         <>
           <div className="bubble" ref={bubbleRef}>
             <div className="title">頁面摘要</div>
-            {phase === 'thinking' && <div className="thinking-text">{statusText}</div>}
+            {phase === 'thinking' && (
+              <div className={impatient ? 'thinking-text impatient' : 'thinking-text'}>
+                {impatient ?? statusText}
+              </div>
+            )}
             {phase === 'error' && <div className="error">{statusText}</div>}
             {(phase === 'speaking' || phase === 'done') && (
               <div

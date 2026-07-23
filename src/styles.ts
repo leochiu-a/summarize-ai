@@ -70,6 +70,13 @@ export const styles = `
     content: "⋯";
     animation: buddy-think 1.4s ease-in-out infinite;
   }
+  /* 被催時的不耐煩台詞：正體、橘紅色，語氣更強一點 */
+  .thinking-text.impatient {
+    color: #c2410c;
+    font-style: normal;
+    font-weight: 600;
+  }
+  .thinking-text.impatient::after { content: ""; }
   @keyframes buddy-think {
     0%, 100% { opacity: .2; }
     50% { opacity: 1; }
