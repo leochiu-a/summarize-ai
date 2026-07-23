@@ -72,6 +72,34 @@ cache of generated summaries, both via chrome.storage.local.
 https://leochiu-a.github.io/summarize-ai/privacy-policy.html
 ```
 
+## Data usage 揭露表單（Data usage disclosure）
+
+開發者後台會要求勾選「打算蒐集哪些使用者資料」。重點：**Google 的政策明訂，資料就算只在
+本機處理、從未傳到任何伺服器，一樣算「handle」使用者資料，必須揭露**——不是「有沒有上傳」
+才算數（來源：[disclosure-requirements](https://developer.chrome.com/docs/webstore/program-policies/disclosure-requirements)、
+[user-data-faq](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq)）。
+
+依這個原則對照本專案實際行為：
+
+| 項目 | 勾選 | 理由 |
+|---|---|---|
+| Personally identifiable information | 否 | 未處理姓名／信箱／生日等資料 |
+| Health information | 否 | 不適用 |
+| Financial and payment information | 否 | 不適用 |
+| Authentication information | 否 | 不適用 |
+| Personal communications | 否 | 不適用 |
+| Location | 否 | 不適用 |
+| **Web history** | **是** | `summaryCache.ts` 把「網址＋頁面標題＋時間戳記」存在本機 30 分鐘，對應範例「頁面清單、標題、造訪時間」 |
+| User activity | 否 | 只監聽自己 UI 元件（頭像／emoji 按鈕）的點擊，不追蹤頁面上的滑鼠／捲動／按鍵 |
+| **Website content** | **是** | 核心功能：讀取當前頁面文字內容以產生摘要 |
+
+三個「I certify」勾選框都勾選——資料不賣給第三方、用途不超出摘要這個單一用途、
+不涉及信用評分或放貸，這三項對本專案都成立。
+
+勾選 Web history + Website content 後，記得跟 [privacy-policy.html](privacy-policy.html) 的內容
+保持一致（審核時會交叉比對）：目前隱私權政策已經提到「快取內容包含頁面網址與產生的摘要文字」，
+已經對得起來，之後改動快取或擷取邏輯時兩邊要一起更新。
+
 （需要先在 repo 的 Settings → Pages 開啟 GitHub Pages，Source 選 `main` 分支的 `/docs` 資料夾，
 才會產生這個網址。首次啟用後通常 1–2 分鐘生效。）
 
