@@ -28,7 +28,9 @@ npm test             # vitest（jsdom 環境）
 npm run test:watch   # vitest watch
 ```
 
-測試涵蓋內容擷取邏輯（`src/lib/summarizer.test.ts`）：Readability 抽正文、非文章頁的垃圾過濾、輸入截斷與工具函式。
+測試分兩層：
+- `src/lib/summarizer.test.ts` — 內容擷取邏輯：Readability 抽正文、非文章頁的垃圾過濾、輸入截斷與工具函式。
+- `src/Buddy.test.tsx` — 元件狀態機（React Testing Library）：thinking→speaking→done 轉換、思考時被催的不耐煩回應與輪播、emoji 反應回嘴。
 
 使用 [Vite Plus](https://viteplus.dev) 打包，content script（含 React runtime）輸出為單一 IIFE（`dist/content.js`）。UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾。
 
