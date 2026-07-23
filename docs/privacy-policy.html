@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>隱私權政策 — Summarize AI Buddy</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    line-height: 1.75;
+    color: #262437;
+    background: #fbf3dd;
+  }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  .updated { color: #6f6a82; font-size: 13px; margin-bottom: 32px; }
+  h2 { font-size: 17px; margin-top: 36px; }
+  p, li { font-size: 15px; }
+  ul { padding-left: 1.3em; }
+  li { margin: 6px 0; }
+  code {
+    background: #26243a12;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.9em;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .card {
+    border: 1px solid #26243a22;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 16px 0;
+    background: #fffdf5;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  a { color: #008cad; }
+  footer { margin-top: 48px; font-size: 13px; color: #6f6a82; }
+
+  /* dark-mode 覆寫必須放在基礎規則之後，同層級選擇器才會生效 */
+  @media (prefers-color-scheme: dark) {
+    body { color: #ece9f5; background: #17151f; }
+    a { color: #6fe3ff; }
+    .card { background: #211f2e; border-color: #3a3750; }
+    code { background: #ffffff14; }
+  }
+</style>
+</head>
+<body>
+
+<h1>隱私權政策</h1>
+<p class="updated">Summarize AI Buddy Chrome Extension ・ 最後更新：2026-07-23</p>
+
+<p>
+  Summarize AI Buddy（以下稱「本擴充功能」）是一個在網頁右下角顯示互動角色、
+  協助你摘要目前瀏覽頁面內容的 Chrome 擴充功能。我們非常重視你的隱私，本頁說明
+  本擴充功能會存取哪些資料、資料如何被處理，以及資料會不會被傳送出去。
+</p>
+
+<div class="card">
+  <h3>一句話總結</h3>
+  <p style="margin:0">
+    所有摘要都在你的裝置本機完成，網頁內容<strong>不會</strong>被傳送到我們或任何第三方的伺服器。
+    我們沒有後端伺服器，也不會蒐集、分析或出售你的任何資料。
+  </p>
+</div>
+
+<h2>本擴充功能會存取什麼</h2>
+<ul>
+  <li>
+    <strong>目前分頁的網頁內容</strong>：當你點擊小夥伴時，本擴充功能會讀取當前頁面
+    可見的文字內容（或用 Readability 演算法抽取的文章正文），做為產生摘要的輸入。
+  </li>
+</ul>
+
+<h2>摘要如何產生</h2>
+<p>
+  本擴充功能使用 Chrome 瀏覽器內建的
+  <a href="https://developer.chrome.com/docs/ai/summarizer-api" target="_blank" rel="noopener">Summarizer API</a>
+  （由 Gemini Nano 模型驅動）。這個模型<strong>直接在你的裝置上運算</strong>，
+  頁面內容與產生的摘要全程只存在於你的瀏覽器裡，不會經過網路傳送到任何伺服器
+  ——包含我們自己的伺服器在內，因為我們根本沒有經營任何伺服器。
+</p>
+
+<h2>本機儲存了什麼</h2>
+<p>為了讓體驗更好，本擴充功能會用 Chrome 的 <code>storage.local</code> API 把以下資料存在你自己的裝置上：</p>
+<ul>
+  <li><strong>使用者設定</strong>：你在設定頁選擇的語氣、摘要類型、是否開啟「每頁自動摘要」。</li>
+  <li><strong>摘要快取</strong>：同一個網址在 30 分鐘內重新開啟時，直接使用先前產生的摘要結果，避免重複運算。快取內容包含頁面網址與產生的摘要文字。</li>
+</ul>
+<p>
+  這些資料只存在你自己的瀏覽器設定檔中，會跟著 Chrome 帳號同步（如果你有開啟 Chrome 同步），
+  但<strong>不會</strong>被傳送給我們或任何第三方。移除本擴充功能時，這些資料會一併被 Chrome 清除。
+</p>
+
+<h2>我們不會做的事</h2>
+<ul>
+  <li>不會蒐集或傳送你的瀏覽紀錄、頁面內容或個人資料到任何伺服器</li>
+  <li>不使用任何分析、追蹤或廣告相關的第三方服務（沒有 Google Analytics、沒有像素、沒有 SDK）</li>
+  <li>不會將資料出售或分享給第三方——因為我們根本不會傳輸或蒐集任何資料</li>
+  <li>不會在背景存取與摘要功能無關的頁面資料</li>
+</ul>
+
+<h2>為什麼需要「讀取所有網站資料」的權限</h2>
+<p>
+  本擴充功能需要在你造訪的網頁上顯示互動角色、並在你主動點擊時讀取當前頁面內容，
+  所以 Chrome 會將此列為「可讀取所有網站的資料」。這個權限只用來：
+  (1) 在頁面右下角顯示小夥伴角色的介面、(2) 在你點擊摘要時擷取當前頁面的文字內容。
+  除此之外不會做任何其他用途，也不會在你未點擊摘要時讀取或處理頁面內容。
+</p>
+
+<h2>圖示與素材</h2>
+<p>
+  介面中使用的動畫表情符號來自
+  <a href="https://googlefonts.github.io/noto-emoji-animation/" target="_blank" rel="noopener">Google Noto Emoji</a>，
+  已隨本擴充功能打包在本機，執行時<strong>不會</strong>向任何外部網址發出請求載入圖片。
+</p>
+
+<h2>政策異動</h2>
+<p>
+  若本隱私權政策有重大異動，我們會更新本頁面頂端的「最後更新」日期。建議在更新
+  本擴充功能版本後，回來確認本頁面內容。
+</p>
+
+<h2>聯絡方式</h2>
+<p>
+  若你對本隱私權政策或本擴充功能的資料處理方式有任何問題，歡迎透過
+  <a href="https://github.com/leochiu-a/summarize-ai/issues" target="_blank" rel="noopener">GitHub Issues</a>
+  與我們聯繫。
+</p>
+
+<footer>
+  Summarize AI Buddy 為開源專案，原始碼公開於
+  <a href="https://github.com/leochiu-a/summarize-ai" target="_blank" rel="noopener">github.com/leochiu-a/summarize-ai</a>。
+</footer>
+
+</body>
+</html>

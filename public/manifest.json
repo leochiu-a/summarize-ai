@@ -3,6 +3,7 @@
   "name": "Summarize AI Buddy",
   "version": "1.0.0",
   "description": "在網頁右下角召喚 pixel 小夥伴，用 Chrome 內建 Summarizer API 幫你摘要頁面內容",
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
