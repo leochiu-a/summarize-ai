@@ -10,6 +10,10 @@
       "run_at": "document_idle"
     }
   ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "小夥伴設定"
+  },
   "web_accessible_resources": [
     {
       "resources": ["assets/sprite.png", "assets/emoji/*.svg", "assets/emoji/*.webp"],

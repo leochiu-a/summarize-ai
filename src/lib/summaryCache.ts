@@ -12,9 +12,9 @@ export interface CachedSummary {
 
 const memory = new Map<string, CachedSummary>()
 
-// 以「來源 + 路徑 + query」當 key（忽略 hash，同頁的錨點不算不同頁）
-function pageKey(): string {
-  return `${KEY_PREFIX}${location.origin}${location.pathname}${location.search}`
+// 以「來源 + 路徑 + query + 設定變體」當 key（忽略 hash；不同語氣 / 類型視為不同快取）
+function pageKey(variant = ''): string {
+  return `${KEY_PREFIX}${location.origin}${location.pathname}${location.search}::${variant}`
 }
 
 function localStore(): chrome.storage.LocalStorageArea | null {
@@ -25,16 +25,16 @@ export function isFresh(ts: number, now: number = Date.now()): boolean {
   return now - ts < CACHE_TTL_MS
 }
 
-export async function getCachedSummary(): Promise<CachedSummary | null> {
-  const key = pageKey()
+export async function getCachedSummary(variant = ''): Promise<CachedSummary | null> {
+  const key = pageKey(variant)
   const store = localStore()
   const entry = store ? ((await store.get(key))[key] as CachedSummary | undefined) : memory.get(key)
   if (!entry || !isFresh(entry.ts)) return null
   return entry
 }
 
-export async function setCachedSummary(markdown: string, title: string): Promise<void> {
-  const key = pageKey()
+export async function setCachedSummary(markdown: string, title: string, variant = ''): Promise<void> {
+  const key = pageKey(variant)
   const entry: CachedSummary = { markdown, title, ts: Date.now() }
   const store = localStore()
   if (store) await store.set({ [key]: entry })

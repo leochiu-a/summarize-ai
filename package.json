@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "vp test run",
-    "build": "vp build",
+    "build": "vp build && vp build --config vite.popup.config.ts",
     "dev": "vp build --watch",
     "typecheck": "tsc --noEmit",
     "test:watch": "vp test"

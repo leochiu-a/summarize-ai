@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { extractContent, pickOutputLanguage } from '../lib/summarizer'
+import { getSettings, toneById } from '../lib/settings'
 import { getCachedSummary, setCachedSummary } from '../lib/summaryCache'
 
 export type Phase = 'idle' | 'thinking' | 'speaking' | 'done' | 'error'
@@ -50,9 +51,14 @@ export function useSummarizer(): Summarizing {
         return
       }
 
-      // 半小時內同一頁直接用快取
+      // 依使用者設定決定摘要類型與語氣
+      const settings = await getSettings()
+      const tone = toneById(settings.tone)
+      const variant = `${settings.tone}:${settings.summaryType}`
+
+      // 半小時內同一頁（同語氣 / 類型）直接用快取
       if (!force) {
-        const cached = await getCachedSummary()
+        const cached = await getCachedSummary(variant)
         if (cached) {
           setMarkdown(cached.markdown)
           setFromCache(true)
@@ -62,9 +68,10 @@ export function useSummarizer(): Summarizing {
       }
 
       const createOptions = {
-        type: 'key-points' as const,
+        type: settings.summaryType,
         format: 'markdown' as const,
         length: 'medium' as const,
+        sharedContext: tone.prompt,
       }
 
       // 部分語言可能不在支援清單，失敗時退回預設輸出語言
@@ -75,7 +82,7 @@ export function useSummarizer(): Summarizing {
       }
 
       const stream = summarizer.summarizeStreaming(article.text, {
-        context: `文章標題：「${article.title}」。這是網頁的內文，請整理重點給讀者。`,
+        context: `文章標題：「${article.title}」。這是網頁的內文，${tone.prompt}`,
       })
 
       // 收到第一個 chunk 才從「思考中」切換成「講話中」
@@ -91,7 +98,7 @@ export function useSummarizer(): Summarizing {
         setPhase('error')
       } else {
         setPhase('done')
-        await setCachedSummary(raw, article.title)
+        await setCachedSummary(raw, article.title, variant)
       }
     } catch (err) {
       setError(`摘要失敗：${err instanceof Error ? err.message : String(err)}`)

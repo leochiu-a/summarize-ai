@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react'
 import snarkdown from 'snarkdown'
 import { Avatar } from './components/Avatar'
+import { EmojiIcon } from './components/EmojiIcon'
 import { ReactionBar } from './components/ReactionBar'
 import { useReactions } from './hooks/useReactions'
 import { useSummarizer } from './hooks/useSummarizer'
 import { useTalkingMouth } from './hooks/useTalkingMouth'
 import { useThinkingChatter } from './hooks/useThinkingChatter'
 import { escapeHtml } from './lib/summarizer'
-
-const boltSvg = chrome.runtime.getURL('assets/emoji/26a1.svg')
-const boltWebp = chrome.runtime.getURL('assets/emoji/26a1.webp')
+import { getSettings } from './lib/settings'
 
 export function Buddy() {
   const { phase, markdown, error, fromCache, summarize, close } = useSummarizer()
@@ -42,6 +41,16 @@ export function Buddy() {
     const el = bubbleRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [markdown])
+
+  // 若使用者開啟「每頁自動摘要」，載入時自動觸發一次
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (autoRan.current) return
+    autoRan.current = true
+    void getSettings().then((s) => {
+      if (s.autoRun) void summarize()
+    })
+  }, [summarize])
 
   const handleActivate = useCallback(() => {
     if (phase === 'thinking') {
@@ -83,8 +92,7 @@ export function Buddy() {
                     onFocus={showTip}
                     onBlur={hideTip}
                   >
-                    <img className="reaction-static" src={boltSvg} alt="" aria-hidden="true" />
-                    <img className="reaction-anim" src={boltWebp} alt="" aria-hidden="true" loading="lazy" />
+                    <EmojiIcon code="26a1" label="重新抓取" />
                   </button>
                   <div ref={tooltipRef} className="tooltip" popover="hint" role="tooltip">
                     重新抓取

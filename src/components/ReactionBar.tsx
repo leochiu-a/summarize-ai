@@ -1,7 +1,5 @@
+import { EmojiIcon } from './EmojiIcon'
 import { REACTIONS } from '../lib/reactions'
-
-const emojiSvg = (code: string) => chrome.runtime.getURL(`assets/emoji/${code}.svg`)
-const emojiWebp = (code: string) => chrome.runtime.getURL(`assets/emoji/${code}.webp`)
 
 interface ReactionBarProps {
   reaction: { code: string; line: string } | null
@@ -22,8 +20,7 @@ export function ReactionBar({ reaction, onReact }: ReactionBarProps) {
             aria-label={r.label}
             onClick={() => onReact(r.code)}
           >
-            <img className="reaction-static" src={emojiSvg(r.code)} alt={r.label} />
-            <img className="reaction-anim" src={emojiWebp(r.code)} alt="" aria-hidden="true" loading="lazy" />
+            <EmojiIcon code={r.code} label={r.label} />
           </button>
         ))}
       </div>

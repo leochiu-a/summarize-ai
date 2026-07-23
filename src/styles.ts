@@ -91,10 +91,10 @@ export const styles = `
   .resummarize:hover { background: #26243a11; transform: scale(1.12); }
   .resummarize:active { transform: scale(.9); }
   /* 預設靜態 SVG，hover 播放動畫 webp（同反應 emoji 的機制，尺寸較小） */
-  .resummarize .reaction-static,
-  .resummarize .reaction-anim { width: 18px; height: 18px; }
-  .resummarize:hover .reaction-static { display: none; }
-  .resummarize:hover .reaction-anim { display: block; }
+  .resummarize .emoji-static,
+  .resummarize .emoji-anim { width: 18px; height: 18px; }
+  .resummarize:hover .emoji-static { display: none; }
+  .resummarize:hover .emoji-anim { display: block; }
 
   /* tooltip：Popover API（top layer）+ CSS anchor positioning，錨在按鈕上方 */
   .tooltip {
@@ -173,17 +173,17 @@ export const styles = `
     border-radius: 8px;
     transition: transform .12s ease, background .12s ease;
   }
-  /* 預設顯示靜態 SVG，hover / 選中時換成 Noto 動畫 webp */
-  .reaction-static,
-  .reaction-anim { width: 26px; height: 26px; display: block; }
-  .reaction-anim { display: none; }
+  /* EmojiIcon 共用基底：預設顯示靜態 SVG，hover / 選中（.on 祖先）時換成 Noto 動畫 webp */
+  .emoji-static,
+  .emoji-anim { width: 26px; height: 26px; display: block; }
+  .emoji-anim { display: none; }
   .reaction-btn:hover,
   .reaction-btn.on { background: #26243a11; transform: scale(1.15); }
   .reaction-btn:active { transform: scale(.9); }
-  .reaction-btn:hover .reaction-static,
-  .reaction-btn.on .reaction-static { display: none; }
-  .reaction-btn:hover .reaction-anim,
-  .reaction-btn.on .reaction-anim { display: block; }
+  .reaction-btn:hover .emoji-static,
+  .reaction-btn.on .emoji-static { display: none; }
+  .reaction-btn:hover .emoji-anim,
+  .reaction-btn.on .emoji-anim { display: block; }
 
   .tail {
     width: 0; height: 0;

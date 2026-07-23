@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Buddy } from './Buddy'
+import { resetSettingsCache, saveSettings } from './lib/settings'
 import { clearSummaryCache } from './lib/summaryCache'
 
 // 用一段夠長的文章塞進頁面，讓 extractContent 抽得到內容（需超過長度門檻）
@@ -48,6 +49,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
   await clearSummaryCache() // 快取以記憶體 fallback 保存，測試間需清掉
+  resetSettingsCache() // 設定也以記憶體 fallback 保存，測試間需清掉
 })
 
 describe('Buddy 狀態機', () => {
@@ -152,5 +154,30 @@ describe('Buddy 快取', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重新抓取' }))
     await waitFor(() => expect(calls.create).toBe(2))
+  })
+})
+
+describe('Buddy 自動摘要設定', () => {
+  it('開啟「每頁自動摘要」時，載入即自動觸發', async () => {
+    seedArticle()
+    await saveSettings({ autoRun: true })
+    stubSummarizer(chunkStream(['自動觸發的摘要']))
+
+    render(<Buddy />)
+
+    // 沒有點擊頭像，應該自己跑到 done
+    await screen.findByRole('button', { name: '讚' })
+    expect(screen.getByText(/自動觸發的摘要/)).toBeTruthy()
+  })
+
+  it('關閉「每頁自動摘要」（預設）時，載入不會自動觸發', async () => {
+    seedArticle()
+    const calls = stubSummarizer(chunkStream(['不該出現']))
+
+    render(<Buddy />)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(calls.create).toBe(0)
+    expect(screen.queryByText(/不該出現/)).toBeNull()
   })
 })

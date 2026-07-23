@@ -1,0 +1,271 @@
+/* 小夥伴設定 popup — 復古掌機 / 終端機控制卡匣風 */
+
+:root {
+  --paper: #fbf3dd;
+  --paper-hi: #fffdf5;
+  --ink: #262437;
+  --ink-soft: #6f6a82;
+  --teal: #00b8d4;
+  --teal-deep: #0090a8;
+  --sun: #ffd23f;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, "Courier New", monospace;
+  --cjk: "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 320px;
+}
+
+.loading {
+  padding: 40px;
+  font-family: var(--mono);
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.panel {
+  width: 320px;
+  padding: 18px 18px 14px;
+  font-family: var(--cjk);
+  color: var(--ink);
+  background-color: var(--paper);
+  /* 點陣紙紋 */
+  background-image: radial-gradient(var(--ink) 0.6px, transparent 0.6px);
+  background-size: 9px 9px;
+  background-position: -2px -2px;
+  position: relative;
+}
+/* 邊緣加一條粗描邊，像卡匣外殼 */
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 2px solid var(--ink);
+  pointer-events: none;
+  opacity: 0.12;
+}
+
+/* ---------- header ---------- */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  animation: rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.portrait {
+  /* sprite 每格原始比例 500:272，用 aspect-ratio 讓瀏覽器算寬度，
+     背景才會等比縮放（同 background-size 300% 100%），不會被硬塞進正方形而橫向壓扁 */
+  height: 58px;
+  aspect-ratio: 500 / 272;
+  flex: none;
+  background-size: 300% 100%;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  background-color: var(--teal);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.head-text { display: flex; flex-direction: column; gap: 3px; }
+.kicker {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--teal-deep);
+  display: flex;
+  align-items: center;
+}
+.caret {
+  display: inline-block;
+  width: 6px;
+  height: 11px;
+  margin-left: 5px;
+  background: var(--teal-deep);
+  animation: blink 1s steps(1) infinite;
+}
+.head-text h1 {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- sections ---------- */
+.section {
+  margin-bottom: 16px;
+  animation: rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  animation-delay: calc((var(--i) + 1) * 0.08s);
+}
+.section-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.section-label .num {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--paper);
+  background: var(--ink);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.section-label .name {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+/* ---------- tone grid ---------- */
+.tone-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+.tone {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px 7px;
+  background: var(--paper-hi);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+}
+.tone:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.tone:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); }
+.tone.on {
+  background: var(--teal);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.18);
+  transform: none;
+}
+.tone-emoji { display: block; line-height: 0; }
+/* EmojiIcon：預設靜態 SVG，hover / 選中時換成 Noto 動畫 webp（跟反應列同一套機制） */
+.emoji-static,
+.emoji-anim { width: 24px; height: 24px; display: block; }
+.emoji-anim { display: none; }
+.tone:hover .emoji-static,
+.tone.on .emoji-static { display: none; }
+.tone:hover .emoji-anim,
+.tone.on .emoji-anim { display: block; }
+.tone-label { font-size: 12px; font-weight: 700; }
+
+/* ---------- summary type segments ---------- */
+.segments {
+  display: flex;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.seg {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+  padding: 8px 2px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--paper-hi);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.seg + .seg { border-left: 2px solid var(--ink); }
+.seg:hover { background: var(--sun); }
+.seg.on { background: var(--ink); color: var(--paper); }
+.hint {
+  margin-top: 7px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+/* ---------- auto-run toggle ---------- */
+.toggle-row {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  background: var(--paper-hi);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: background 0.15s ease;
+}
+.toggle-row.on { background: #eafaff; }
+.toggle-copy { display: flex; flex-direction: column; gap: 2px; }
+.toggle-title { font-size: 13px; font-weight: 800; }
+.toggle-hint { font-size: 10.5px; color: var(--ink-soft); }
+.switch {
+  flex: none;
+  position: relative;
+  width: 62px;
+  height: 30px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+}
+.toggle-row.on .switch { background: var(--teal); }
+.switch-state {
+  position: absolute;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  left: 8px;
+  color: var(--ink-soft);
+}
+.toggle-row.on .switch-state { left: auto; right: 8px; color: var(--ink); }
+.knob {
+  position: absolute;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  background: var(--sun);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  transition: left 0.18s cubic-bezier(0.5, 1.6, 0.5, 1);
+}
+.toggle-row.on .knob { left: 32px; }
+
+/* ---------- footer ---------- */
+.foot {
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 2px dashed rgba(38, 36, 55, 0.22);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+.blink { color: var(--teal-deep); animation: blink 1.1s steps(1) infinite; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
