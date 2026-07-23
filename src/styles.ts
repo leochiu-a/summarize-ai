@@ -94,6 +94,43 @@ export const styles = `
   }
   .content strong { color: #008cad; }
 
+  /* 摘要完成後的反應區 */
+  .reactions {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #26243a1f;
+  }
+  .reaction-reply {
+    color: #008cad;
+    font-weight: 600;
+    margin-bottom: 8px;
+    animation: buddy-pop .25s ease;
+  }
+  @keyframes buddy-pop {
+    0% { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .reaction-row { display: flex; gap: 4px; }
+  .reaction-btn {
+    all: unset;
+    cursor: pointer;
+    line-height: 0;
+    padding: 5px;
+    border-radius: 8px;
+    transition: transform .12s ease, background .12s ease;
+  }
+  /* 預設顯示靜態 SVG，hover / 選中時換成 Noto 動畫 webp */
+  .reaction-static,
+  .reaction-anim { width: 26px; height: 26px; display: block; }
+  .reaction-anim { display: none; }
+  .reaction-btn:hover,
+  .reaction-btn.on { background: #26243a11; transform: scale(1.15); }
+  .reaction-btn:active { transform: scale(.9); }
+  .reaction-btn:hover .reaction-static,
+  .reaction-btn.on .reaction-static { display: none; }
+  .reaction-btn:hover .reaction-anim,
+  .reaction-btn.on .reaction-anim { display: block; }
+
   .tail {
     width: 0; height: 0;
     margin-right: ${Math.round(AVATAR_W / 2) - 8}px;

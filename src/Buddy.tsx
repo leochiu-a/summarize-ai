@@ -27,6 +27,19 @@ const IMPATIENT_LINES = [
   '你越催我會越慢喔 😤',
 ]
 
+// 摘要完成後可以按的反應 emoji，小夥伴會用他的口吻回嘴（多句輪播）
+// code 對應 Google Noto emoji 檔名：預設顯示靜態 .svg，hover 播放動畫 .webp
+const REACTIONS: { code: string; label: string; lines: string[] }[] = [
+  { code: '1f44d', label: '讚', lines: ['嘿嘿，不錯吧', '我就知道你會喜歡', '這摘要品質沒話說吧'] },
+  { code: '1f44e', label: '爛', lines: ['蛤？我可是很認真讀的欸', '好啦下次我會更用心…', '你行你來摘啊'] },
+  { code: '1f634', label: '無聊', lines: ['這篇是真的有點無聊啦…', '我唸的時候也差點睡著', '別怪我，原文就這樣'] },
+  { code: '1f92f', label: '驚', lines: ['對吧！我第一次看也嚇到', '資訊量有點大齁', '很猛吧這篇'] },
+  { code: '2764_fe0f', label: '愛', lines: ['別這樣，我會害羞啦', '嘿嘿，過獎了', '愛你喔（欸不是）'] },
+]
+
+const emojiSvg = (code: string) => chrome.runtime.getURL(`assets/emoji/${code}.svg`)
+const emojiWebp = (code: string) => chrome.runtime.getURL(`assets/emoji/${code}.webp`)
+
 export function Buddy() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [bubbleOpen, setBubbleOpen] = useState(false)
@@ -34,14 +47,18 @@ export function Buddy() {
   const [markdown, setMarkdown] = useState('')
   const [frame, setFrame] = useState(0)
   const [impatient, setImpatient] = useState<string | null>(null)
+  const [reaction, setReaction] = useState<{ code: string; line: string } | null>(null)
+  const [reacting, setReacting] = useState(false)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const impatientIdx = useRef(0)
   const impatientTimer = useRef<number | null>(null)
+  const reactIdx = useRef<Record<string, number>>({})
+  const reactTimer = useRef<number | null>(null)
   const busy = phase === 'thinking' || phase === 'speaking'
 
-  // 講話動畫：thinking（碎念）和 speaking（唸摘要）時都在動嘴
+  // 講話動畫：thinking（碎念）、speaking（唸摘要）、reacting（回應 emoji）時都在動嘴
   useEffect(() => {
-    if (phase !== 'thinking' && phase !== 'speaking') {
+    if (phase !== 'thinking' && phase !== 'speaking' && !reacting) {
       setFrame(0)
       return
     }
@@ -51,7 +68,7 @@ export function Buddy() {
       step++
     }, 140)
     return () => clearInterval(timer)
-  }, [phase])
+  }, [phase, reacting])
 
   // 思考時輪播碎念台詞
   useEffect(() => {
@@ -82,6 +99,7 @@ export function Buddy() {
   const summarize = useCallback(async () => {
     setBubbleOpen(true)
     setMarkdown('')
+    setReaction(null)
 
     let summarizer: Summarizer | null = null
     try {
@@ -161,10 +179,23 @@ export function Buddy() {
     if (bubbleOpen) {
       setBubbleOpen(false)
       setPhase('idle')
+      setReaction(null)
       return
     }
     void summarize()
   }, [phase, busy, bubbleOpen, summarize])
+
+  // 按下反應 emoji → 小夥伴用他的口吻回嘴、動嘴，再按同一個換句話
+  const react = useCallback((code: string) => {
+    const def = REACTIONS.find((r) => r.code === code)
+    if (!def) return
+    const idx = reactIdx.current[code] ?? 0
+    reactIdx.current[code] = idx + 1
+    setReaction({ code, line: def.lines[idx % def.lines.length] })
+    setReacting(true)
+    if (reactTimer.current !== null) clearTimeout(reactTimer.current)
+    reactTimer.current = window.setTimeout(() => setReacting(false), 1600)
+  }, [])
 
   return (
     <div className="buddy">
@@ -183,6 +214,25 @@ export function Buddy() {
                 className="content"
                 dangerouslySetInnerHTML={{ __html: snarkdown(escapeHtml(markdown)) }}
               />
+            )}
+            {phase === 'done' && (
+              <div className="reactions">
+                {reaction && <div className="reaction-reply">「{reaction.line}」</div>}
+                <div className="reaction-row">
+                  {REACTIONS.map((r) => (
+                    <button
+                      key={r.code}
+                      type="button"
+                      className={reaction?.code === r.code ? 'reaction-btn on' : 'reaction-btn'}
+                      aria-label={r.label}
+                      onClick={() => react(r.code)}
+                    >
+                      <img className="reaction-static" src={emojiSvg(r.code)} alt={r.label} />
+                      <img className="reaction-anim" src={emojiWebp(r.code)} alt="" aria-hidden="true" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
           <div className="tail" />
