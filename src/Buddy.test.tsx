@@ -43,8 +43,9 @@ function chunkStream(chunks: string[]): () => AsyncIterable<string> {
   }
 }
 
-const avatar = () => screen.getByRole('button', { name: '點我摘要這個頁面' })
-const productAvatar = () => screen.getByRole('button', { name: '點我看這個商品值不值得買' })
+// 頭像不再有依模式變化的提示文字，統一用固定 aria-label 定位（商品頁 / 一般頁同一顆）
+const avatar = () => screen.getByRole('button', { name: 'Buddy AI' })
+const productAvatar = avatar
 
 // 建立可控的 LanguageModel stub（值不值得買用 Prompt API）
 function stubLanguageModel(streamFactory: () => AsyncIterable<string>) {
@@ -184,7 +185,7 @@ describe('Buddy 快取', () => {
     await screen.findByRole('button', { name: '讚' })
     expect(calls.create).toBe(1)
 
-    fireEvent.click(screen.getByRole('button', { name: '重新抓取' }))
+    fireEvent.click(screen.getByRole('button', { name: '重做' }))
     await waitFor(() => expect(calls.create).toBe(2))
   })
 })

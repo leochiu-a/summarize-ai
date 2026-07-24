@@ -1,12 +1,11 @@
 import { useCallback, useState } from 'react'
+import type { BuddyPhase } from '../lib/buddyPhase'
 import { extractContent, pickOutputLanguage } from '../lib/summarizer'
 import { getSettings, toneById } from '../lib/settings'
 import { getCachedSummary, setCachedSummary } from '../lib/summaryCache'
 
-export type Phase = 'idle' | 'thinking' | 'speaking' | 'done' | 'error'
-
 export interface Summarizing {
-  phase: Phase
+  phase: BuddyPhase
   markdown: string
   error: string
   fromCache: boolean
@@ -17,7 +16,7 @@ export interface Summarizing {
 // 核心摘要流程：擷取內容 → 查快取 →（未命中）串流摘要 → 寫快取。
 // force=true 略過快取、強制重跑（重新摘要按鈕用）。
 export function useSummarizer(): Summarizing {
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [phase, setPhase] = useState<BuddyPhase>('idle')
   const [markdown, setMarkdown] = useState('')
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
@@ -89,7 +88,7 @@ export function useSummarizer(): Summarizing {
       let raw = ''
       for await (const chunk of stream) {
         raw += chunk
-        setPhase('speaking')
+        setPhase('streaming')
         setMarkdown(raw)
       }
 

@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-// 等待摘要時的碎念，讓他看起來像真的在讀、在想
-const THINKING_LINES = [
-  '讓我看看這頁在講什麼',
-  '嗯……這篇好像有點長',
-  '等我一下，我快速掃過去',
-  '重點好像藏在中間欸',
-  '快好了，我整理一下',
-  '再給我一秒鐘就好',
-]
-
-// 思考時被一直點，回一句不耐煩的話
+// 思考時被一直點，回一句不耐煩的話（與模式無關，各模式共用）
 const IMPATIENT_LINES = [
   '欸，我還在看啦，別催',
   '好啦好啦，馬上就好',
@@ -20,6 +10,8 @@ const IMPATIENT_LINES = [
 ]
 
 const NAG_HOLD_MS = 2200
+// lines 為空時的保底（理論上不會發生，strategy 都會帶台詞）
+const FALLBACK_LINES = ['讓我想一下……']
 
 export interface Chatter {
   line: string
@@ -27,9 +19,11 @@ export interface Chatter {
   nag: () => void
 }
 
-// 思考狀態下：輪播碎念台詞；nag() 讓小夥伴回一句不耐煩的話暫時蓋過碎念
-export function useThinkingChatter(active: boolean): Chatter {
-  const [line, setLine] = useState(THINKING_LINES[0])
+// 思考狀態下輪播碎念台詞；台詞由呼叫端（strategy）提供，hook 不認得任何模式。
+// nag() 讓小夥伴回一句不耐煩的話暫時蓋過碎念。
+export function useThinkingChatter(active: boolean, thinkingLines: string[]): Chatter {
+  const lines = thinkingLines.length ? thinkingLines : FALLBACK_LINES
+  const [line, setLine] = useState(lines[0])
   const [impatient, setImpatient] = useState<string | null>(null)
   const nagIdx = useRef(0)
   const nagTimer = useRef<number | null>(null)
@@ -44,13 +38,13 @@ export function useThinkingChatter(active: boolean): Chatter {
       return
     }
     let i = 0
-    setLine(THINKING_LINES[0])
+    setLine(lines[0])
     const timer = setInterval(() => {
-      i = (i + 1) % THINKING_LINES.length
-      setLine(THINKING_LINES[i])
+      i = (i + 1) % lines.length
+      setLine(lines[i])
     }, 2200)
     return () => clearInterval(timer)
-  }, [active])
+  }, [active, lines])
 
   const nag = useCallback(() => {
     const next = IMPATIENT_LINES[nagIdx.current % IMPATIENT_LINES.length]

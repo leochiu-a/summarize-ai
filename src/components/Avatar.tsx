@@ -2,22 +2,14 @@ import { FRAMES } from '../constants'
 
 const SPRITE_URL = chrome.runtime.getURL('assets/sprite.png')
 
-export function Avatar({
-  frame,
-  onActivate,
-  title = '點我摘要這個頁面',
-}: {
-  frame: number
-  onActivate: () => void
-  title?: string
-}) {
+export function Avatar({ frame, onActivate }: { frame: number; onActivate: () => void }) {
   return (
     <div className="avatar-wrap">
       <div
         className="avatar"
         role="button"
         tabIndex={0}
-        title={title}
+        aria-label="Buddy AI"
         style={{
           backgroundImage: `url("${SPRITE_URL}")`,
           backgroundPosition: `${(frame / (FRAMES - 1)) * 100}% 0`,
