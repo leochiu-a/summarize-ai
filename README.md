@@ -27,7 +27,7 @@ Chrome extension：在 [kkday.com](https://kkday.com) 網頁右下角會出現�
 
 1. **偵測與定位**（[`src/lib/productPage.ts`](src/lib/productPage.ts)）：`isProductPage()` 認出商品頁；`findDescSection()` 以 `#product-info-sec` 為主、退回用「商品說明」標題文字反查外框（不綁 Vue `data-v-*` / 樣式 class，避免改版誤傷）；`extractDescText()` 抽出去掉標題與雜訊的內文（截斷 6000 字）。
 2. **等待與注入**：KKday 是 Nuxt SPA，`waitForDescSection()` 用 `MutationObserver` 等區塊 render 完成，才把獨立 Shadow DOM host 插在「商品說明」標題正下方（樣式隔離、不依賴宿主 CSS）。`onRouteChange()` patch `history` API，站內導航切換商品時拆掉舊卡片重跑；另有 sentinel + observer 守住被框架 re-render 洗掉時重新注入。
-3. **串流摘要**（[`src/lib/productSummary.ts`](src/lib/productSummary.ts)）：用 `LanguageModel.create()` 建 session，`session.promptStreaming(指示 + 內文)` 串流輸出「一段話」（指示要求：繁中、2～3 句、不條列 / 不用 Markdown、聚焦「這是什麼 + 適合哪種旅客」）。收到第一塊前顯示 skeleton，之後邊生成邊即時顯示。<br>注意：Prompt API 的 `expectedInputs/expectedOutputs` 只支援 `[de, en, es, fr, ja]`，指定 `zh-Hant` 會被拒，因此不宣告語言、改由指示要求繁中輸出（品質不保證，屬 API 未正式支援的語言）。
+3. **串流摘要**（[`src/lib/productSummary.ts`](src/lib/productSummary.ts)）：用 `LanguageModel.create()` 建 session，`session.promptStreaming(指示 + 內文)` 串流輸出「一段話」（指示要求：繁中、2～3 句、不條列 / 不用 Markdown、聚焦「這是什麼 + 適合哪種旅客」）；**語氣沿用 popup 的設定**（幽默 / 正經 / 溫柔…，見 [`src/lib/settings.ts`](src/lib/settings.ts) 的 `TONES`）。收到第一塊前顯示 skeleton，之後邊生成邊即時顯示。<br>注意：Prompt API 的 `expectedInputs/expectedOutputs` 只支援 `[de, en, es, fr, ja]`，指定 `zh-Hant` 會被拒，因此不宣告語言、改由指示要求繁中輸出（品質不保證，屬 API 未正式支援的語言）。
 4. **可用性與手勢**：模型 `availability` 非 `available` 時不自動跑（Chrome 要求「使用者手勢」才能下載模型），改顯示按鈕讓使用者點一下觸發。
 5. **快取**（[`src/lib/productSummaryCache.ts`](src/lib/productSummaryCache.ts)）：以「商品 id + 語氣」為 key 存 `chrome.storage.local`，TTL 24 小時（商品說明變動少）；命中顯示「快取」標記。
 

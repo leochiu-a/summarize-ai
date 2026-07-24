@@ -56,27 +56,28 @@ describe('availability', () => {
 describe('generateProductSummary（串流一段話）', () => {
   it('累加串流 chunks 後回傳完整文字', async () => {
     stubLanguageModel(['釜山', '通行證', '一票暢遊'])
-    const result = await generateProductSummary('商品內文')
+    const result = await generateProductSummary('商品內文', '幽默口吻')
     expect(result).toBe('釜山通行證一票暢遊')
   })
 
   it('onChunk 收到逐步累積的內容', async () => {
     stubLanguageModel(['A', 'B', 'C'])
     const seen: string[] = []
-    await generateProductSummary('內文', (acc) => seen.push(acc))
+    await generateProductSummary('內文', '幽默口吻', (acc) => seen.push(acc))
     expect(seen).toEqual(['A', 'AB', 'ABC'])
   })
 
-  it('create 不帶選項；promptStreaming 帶上「一段話」指示 + 內文', async () => {
+  it('create 不帶選項；promptStreaming 帶上「一段話」指示、語氣與內文', async () => {
     const { createCalls, promptCalls } = stubLanguageModel(['x'])
-    await generateProductSummary('商品內文')
+    await generateProductSummary('商品內文', '請用厭世淡定的口吻')
     expect(createCalls[0].opts).toBeUndefined()
     expect(promptCalls[0].input).toContain('一段話') // 指示前綴
+    expect(promptCalls[0].input).toContain('請用厭世淡定的口吻') // 語氣注入
     expect(promptCalls[0].input).toContain('商品內文') // 實際內文
   })
 
   it('不支援 API 時丟出可讀錯誤', async () => {
     vi.stubGlobal('LanguageModel', undefined)
-    await expect(generateProductSummary('內文')).rejects.toThrow(/Prompt API/)
+    await expect(generateProductSummary('內文', '口吻')).rejects.toThrow(/Prompt API/)
   })
 })
