@@ -1,11 +1,12 @@
 # Summarize AI Buddy
 
-Chrome extension：網頁右下角會出現一個 pixel 小夥伴，點他就會用 Chrome 內建的 [Summarizer API](https://developer.chrome.com/docs/ai/summarizer-api) 摘要目前頁面（文章頁或首頁/列表頁都行），串流輸出時嘴巴會動、像在講話。
+Chrome extension：在 [kkday.com](https://kkday.com) 網頁右下角會出現一個 pixel 小夥伴，點他就會用 Chrome 內建的 [Summarizer API](https://developer.chrome.com/docs/ai/summarizer-api) 摘要目前頁面（文章頁或首頁/列表頁都行），串流輸出時嘴巴會動、像在講話。
 
 ## 需求
 
 - Chrome 138+（Summarizer API 內建於穩定版）
 - 裝置需符合內建 AI 硬體需求（>4GB VRAM、>22GB 可用空間；第一次使用會自動下載 Gemini Nano 模型）
+- 只在 `kkday.com`（含子網域）上運作，manifest 的 `content_scripts` / `web_accessible_resources` 都限定這個 host pattern
 
 ## 運作原理
 
@@ -52,7 +53,7 @@ npm run test:watch   # vitest watch
 1. 打開 `chrome://extensions`
 2. 開啟右上角「開發人員模式」
 3. 點「載入未封裝項目」，選擇本專案的 `dist/` 資料夾
-4. 打開任何頁面，右下角就會出現小夥伴，點他開始摘要
+4. 打開 kkday.com 上的任何頁面，右下角就會出現小夥伴，點他開始摘要
 
 ## 打包成 zip（上架 / 分發）
 

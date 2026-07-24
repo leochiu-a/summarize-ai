@@ -8,16 +8,21 @@
 
 ## 簡短描述（Short description，上限 132 字元）
 
-目前 58 字元，在上限內：
+**這一段就是後台「Summary from package」自動帶出來的文字**——它直接讀取 `public/manifest.json`
+的 `"description"` 欄位，不是表單裡另外填的獨立欄位，也沒辦法在後台直接編輯，要改字就是改
+manifest 再重新上傳套件。目前 68 字元，在上限內：
 
 ```text
-在網頁右下角召喚 pixel 小夥伴，用 Chrome 內建 AI 幫你摘要頁面內容——語氣任選，全程本機運算不上傳
+在 kkday.com 網頁右下角召喚 pixel 小夥伴，用 Chrome 內建 AI 幫你摘要頁面內容，語氣任選、全程本機運算不上傳
 ```
 
 ## 詳細描述（Detailed description）
 
+⚠️ 這段開頭刻意**不要**跟上面的 Summary 重複（後台會把兩段疊在一起顯示，逐字重複讀起來會很怪），
+直接從小夥伴的個性與功能清單切入：
+
 ```text
-在網頁右下角召喚一個會碎念、會動嘴講話的 pixel 小夥伴，點一下就用 Chrome 瀏覽器內建的 AI（Summarizer API）幫你把目前頁面整理成摘要。不管是落落長的文章，還是資訊爆炸的列表頁，都能快速抓到重點。
+會碎念、會動嘴講話，看完摘要還會用表情回你一句話——這不是普通的摘要工具，是一個有個性的 pixel 小夥伴。不管是落落長的文章，還是資訊爆炸的列表頁，點一下都能快速幫你抓到重點。
 
 【功能特色】
 
@@ -34,6 +39,7 @@
 
 【使用需求】
 
+• 僅在 kkday.com（含子網域）上運作，其他網站不會出現小夥伴
 • Chrome 138 以上版本（Summarizer API 內建於穩定版）
 • 裝置需符合內建 AI 的硬體需求（約 4GB 以上顯示記憶體、22GB 以上可用儲存空間）
 • 第一次使用會自動下載 AI 模型，之後即可離線使用
@@ -55,15 +61,19 @@ https://github.com/leochiu-a/summarize-ai
 開發者後台會**針對每個宣告的權限各自要求一段說明**（各自獨立的文字框，上限 1000 字元），
 不是合併成一段。
 
-### Host permission justification（對應 `<all_urls>`）
+### Host permission justification（對應 `*://kkday.com/*`、`*://*.kkday.com/*`）
+
+已經改用限定網域的 host pattern，**不再是 `<all_urls>`**，所以後台「Broad Host Permissions」
+那則深度審查警告不會再出現。
 
 ```text
-This extension displays an interactive avatar in the corner of every page and,
-only when the user clicks it, reads the current page's visible text content
-to generate a summary using Chrome's built-in on-device Summarizer API.
-Because the avatar and summarization feature must work on any website the
-user chooses to visit, the extension requests access to all URLs. No page
-content is transmitted anywhere — summarization runs entirely on-device.
+This extension displays an interactive avatar in the corner of pages on
+kkday.com (including its subdomains) and, only when the user clicks it,
+reads the current page's visible text content to generate a summary using
+Chrome's built-in on-device Summarizer API. Host permission is limited to
+kkday.com and its subdomains only — the extension does not run on, and has
+no access to, any other website. No page content is transmitted anywhere —
+summarization runs entirely on-device.
 ```
 
 ### storage justification（對應 `"permissions": ["storage"]`）
@@ -120,3 +130,17 @@ https://leochiu-a.github.io/summarize-ai/privacy-policy.html
 ## 類別建議
 
 生產力工具（Productivity）或「工具」（Tools）皆可，視 Chrome Web Store 當時分類清單而定。
+
+## 上架方式建議
+
+這個擴充功能現在限定只在 kkday.com 上運作，比較像是公司內部工具，不見得需要走「公開上架、
+讓任何人都能搜尋安裝」這條路（反正非 kkday 使用者裝了也用不了）。可以考慮：
+
+- **Unlisted（不公開列出）**：在開發者後台把可見度設為 Unlisted，只有拿到直接連結的人能安裝，
+  不會出現在 Chrome Web Store 搜尋結果裡，但審核流程跟公開上架一樣。
+- **企業強制安裝**：如果公司有用 Google Workspace 管理 Chrome，可透過 Google Admin 主控台
+  把擴充功能推送給指定帳號，完全不用經過 Chrome Web Store 審核。
+- **直接分享 zip**：同事各自 `chrome://extensions` → 開發人員模式 → 載入未封裝項目
+  （或載入 `npm run package` 產出的 zip 解壓後的資料夾），適合人數少、更新頻繁的階段。
+
+如果之後還是想公開上架（例如未來要開放給更多 kkday 網域外的使用者），上面幾段文案都還適用。
