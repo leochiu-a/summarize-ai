@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { extractDescText, findDescSection, getProductId } from '../lib/productPage'
 import { availability, generateProductSummary } from '../lib/productSummary'
 import { getCachedProductSummary, setCachedProductSummary } from '../lib/productSummaryCache'
-import { getSettings, toneById } from '../lib/settings'
+import { getSettings } from '../lib/settings'
 
 // needs-activation：模型尚未下載，Chrome 要求「使用者手勢」才能開始下載，
 // 所以不能在掛載時自動跑，改顯示按鈕讓使用者點一下。
@@ -79,7 +79,7 @@ export function useProductSummary(): ProductSummarizing {
 
       setPhase('generating')
       // 串流：每收到一塊就更新 data，讓卡片邊生成邊顯示（語氣沿用 popup 設定）
-      const result = await generateProductSummary(text, toneById(tone).prompt, (acc) => setData(acc))
+      const result = await generateProductSummary(text, tone, (acc) => setData(acc))
       setData(result)
       setPhase('done')
       await setCachedProductSummary(productId, tone, result)
