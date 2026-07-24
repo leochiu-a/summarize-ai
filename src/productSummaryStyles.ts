@@ -1,0 +1,81 @@
+// 商品摘要卡片的 Shadow DOM 樣式（隔離宿主頁面 CSS）。
+// 視覺對齊 KKday 原生 .ai-summary：漸層底、8px 圓角、20px 24px padding、
+// 淡青 icon（#6aeef7）+ 青→藍漸層文字標題（16px/600）、Noto Sans TC。
+
+export const productSummaryStyles = `
+  :host { all: initial; display: block; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  .ps-card {
+    margin: 16px 0;
+    background: linear-gradient(135deg, #f0fbfc, #f2faff);
+    border-radius: 8px;
+    padding: 20px 24px;
+    color: #212121;
+    font-family: "Noto Sans TC", -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .ps-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .ps-icon { width: 20px; height: 20px; color: #6aeef7; fill: #6aeef7; flex: none; }
+  .ps-title {
+    font-size: 16px;
+    font-weight: 600;
+    /* 對齊原生：青→藍漸層文字 */
+    background: linear-gradient(90deg, #10d5e3, #2ec4f2 46%, #4daaf7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    margin-right: auto;
+  }
+  .ps-badge {
+    font-size: 11px;
+    color: #5a7a82;
+    background: #00b3d11a;
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+
+  .ps-raw { white-space: pre-wrap; word-break: break-word; font-size: 16px; line-height: 1.7; }
+
+  /* loading skeleton */
+  .ps-loading { color: #4a6b73; font-size: 14px; margin-bottom: 10px; }
+  .ps-skeleton { display: flex; flex-direction: column; gap: 8px; }
+  .ps-sk-line {
+    height: 12px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #d9eef2 25%, #eaf7fa 37%, #d9eef2 63%);
+    background-size: 400% 100%;
+    animation: ps-shimmer 1.4s ease infinite;
+  }
+  .ps-sk-line.w70 { width: 70%; }
+  .ps-sk-line.w50 { width: 50%; }
+  @keyframes ps-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: 0 0; }
+  }
+
+  .ps-error { color: #b45309; font-size: 14px; }
+
+  .ps-activate {
+    all: unset;
+    cursor: pointer;
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: #00b3d1;
+    border-radius: 6px;
+    padding: 8px 16px;
+    transition: background .12s ease, transform .12s ease;
+  }
+  .ps-activate:hover { background: #009cb6; transform: translateY(-1px); }
+  .ps-activate:active { transform: scale(.97); }
+`

@@ -2,6 +2,8 @@
 
 Chrome extension：在 [kkday.com](https://kkday.com) 網頁右下角會出現一個 pixel 小夥伴，點他就會用 Chrome 內建的 [Summarizer API](https://developer.chrome.com/docs/ai/summarizer-api) 摘要目前頁面（文章頁或首頁/列表頁都行），串流輸出時嘴巴會動、像在講話。
 
+此外，進入 KKday **商品頁**時，會自動在「商品說明」標題下方插入一張 **AI 商品重點摘要卡片**，用一段話說明「這是什麼商品、適合哪一種旅客」，視覺對齊 KKday 原生的「AI 精選旅客評論摘要」框。這張卡片用 Chrome 內建的 [Prompt API](https://developer.chrome.com/docs/ai/prompt-api)（`LanguageModel`）串流輸出。
+
 ## 需求
 
 - Chrome 138+（Summarizer API 內建於穩定版）
@@ -18,6 +20,18 @@ Chrome extension：在 [kkday.com](https://kkday.com) 網頁右下角會出現�
    - 內文截斷在 16000 字（Summarizer 輸入額度）。
 2. **查快取**（[`src/lib/summaryCache.ts`](src/lib/summaryCache.ts)）：同一個網址半小時內重開，直接用快取、跳過模型（顯示「快取」標記）。存在 `chrome.storage.local`（跨分頁、跨重新整理），測試 / demo 無此 API 時退回記憶體。
 3. **串流摘要**（[`src/hooks/useSummarizer.ts`](src/hooks/useSummarizer.ts)）：依使用者設定的語氣與摘要類型呼叫 `Summarizer.summarizeStreaming()`，狀態機 `idle → thinking → speaking → done`。等待第一個 chunk 時輪播碎念台詞、嘴巴同步開合；收到內容後即時以 [snarkdown](https://github.com/developit/snarkdown) 渲染 markdown，完成後寫入快取。標題列的 ⚡ 可強制重新摘要（略過快取）。
+
+## 商品說明摘要卡片（Prompt API）
+
+只在商品頁（URL 形如 `/product/<id>`）觸發，流程在 [`src/content.tsx`](src/content.tsx) 編排、資料層在 `src/lib/product*.ts`：
+
+1. **偵測與定位**（[`src/lib/productPage.ts`](src/lib/productPage.ts)）：`isProductPage()` 認出商品頁；`findDescSection()` 以 `#product-info-sec` 為主、退回用「商品說明」標題文字反查外框（不綁 Vue `data-v-*` / 樣式 class，避免改版誤傷）；`extractDescText()` 抽出去掉標題與雜訊的內文（截斷 6000 字）。
+2. **等待與注入**：KKday 是 Nuxt SPA，`waitForDescSection()` 用 `MutationObserver` 等區塊 render 完成，才把獨立 Shadow DOM host 插在「商品說明」標題正下方（樣式隔離、不依賴宿主 CSS）。`onRouteChange()` patch `history` API，站內導航切換商品時拆掉舊卡片重跑；另有 sentinel + observer 守住被框架 re-render 洗掉時重新注入。
+3. **串流摘要**（[`src/lib/productSummary.ts`](src/lib/productSummary.ts)）：用 `LanguageModel.create()` 建 session，`session.promptStreaming(指示 + 內文)` 串流輸出「一段話」（指示要求：繁中、2～3 句、不條列 / 不用 Markdown、聚焦「這是什麼 + 適合哪種旅客」）。收到第一塊前顯示 skeleton，之後邊生成邊即時顯示。<br>注意：Prompt API 的 `expectedInputs/expectedOutputs` 只支援 `[de, en, es, fr, ja]`，指定 `zh-Hant` 會被拒，因此不宣告語言、改由指示要求繁中輸出（品質不保證，屬 API 未正式支援的語言）。
+4. **可用性與手勢**：模型 `availability` 非 `available` 時不自動跑（Chrome 要求「使用者手勢」才能下載模型），改顯示按鈕讓使用者點一下觸發。
+5. **快取**（[`src/lib/productSummaryCache.ts`](src/lib/productSummaryCache.ts)）：以「商品 id + 語氣」為 key 存 `chrome.storage.local`，TTL 24 小時（商品說明變動少）；命中顯示「快取」標記。
+
+狀態機在 [`src/hooks/useProductSummary.ts`](src/hooks/useProductSummary.ts)（`idle → checking →`（需要時）`needs-activation → generating → done / error`），UI 在 [`src/components/ProductSummaryCard.tsx`](src/components/ProductSummaryCard.tsx)，樣式對齊原生 `.ai-summary`。
 
 ## 設定（popup）
 
@@ -45,6 +59,10 @@ npm run test:watch   # vitest watch
 - `src/lib/summaryCache.test.ts` — 快取讀寫與 TTL 判斷。
 - `src/lib/settings.test.ts` — 設定的預設值、merge、資料表完整性，以及**連續快速寫入不互相覆蓋**（同步 merge 在記憶體真相來源上，避免 popup 快速切換設定時只剩最後一次生效）。
 - `src/Buddy.test.tsx` — 元件狀態機（React Testing Library）：thinking→speaking→done 轉換、思考時被催的不耐煩回應與輪播、emoji 反應回嘴、快取命中 / 強制重跑、自動摘要設定生效與否。
+- `src/lib/productPage.test.ts` — 商品頁偵測、`#product-info-sec` / 標題反查定位、內文擷取濾雜訊、`onRouteChange` 只在 pathname 變動時觸發。
+- `src/lib/productSummary.test.ts` — stub `LanguageModel`：驗證語氣注入 system prompt、`responseConstraint` 傳入、JSON parse 與缺欄位補值、API 不支援時的錯誤。
+- `src/lib/productSummaryCache.test.ts` — 商品摘要快取讀寫、語氣分開存、TTL。
+- `src/components/ProductSummaryCard.test.tsx` — 掛載自動產生四區塊、模型不可用顯示錯誤、重新產生再次呼叫模型。
 
 `npm run build` 分兩階段：`vp build` 打包 content script（含 React runtime，輸出單一 IIFE `dist/content.js`），接著 `vp build --config vite.popup.config.ts` 打包 popup（一般 extension 頁面，可用 ESM，輸出 `dist/popup.html` + JS/CSS）。UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾；popup 是獨立頁面，用一般 `<link>`/`<style>` 即可。
 
@@ -77,21 +95,27 @@ public/assets/sprite.png      # 3 格 sprite sheet（閉嘴 / 半開 / 張嘴）
 public/assets/emoji/          # emoji 資產：靜態 .svg + 動畫 .webp（Google Noto）
 popup.html                    # popup 進入頁
 vite.popup.config.ts          # popup 的獨立 build 設定（ESM，不 emptyOutDir）
-src/content.tsx               # content script 進入點：建 Shadow DOM host、掛載 React
+src/content.tsx               # content script 進入點：掛載小夥伴 + 商品說明摘要卡片注入編排
 src/Buddy.tsx                 # 編排層：組合 hooks 與子元件、bubble 版面
 src/components/Avatar.tsx     # 小夥伴頭像（sprite 嘴型）
 src/components/ReactionBar.tsx# 反應 emoji 列
 src/components/EmojiIcon.tsx  # 共用 emoji 圖示：靜態 SVG + hover 動畫 webp
+src/components/ProductSummaryCard.tsx # 商品說明摘要卡片（四區塊 + loading / error 態）
 src/hooks/useSummarizer.ts    # 摘要流程 + 狀態機 + 快取 + 設定
+src/hooks/useProductSummary.ts# 商品摘要流程 + 狀態機（Prompt API，不串流）
 src/hooks/useThinkingChatter.ts # 思考碎念輪播 + 不耐煩回應
 src/hooks/useTalkingMouth.ts  # 講話嘴型動畫
 src/hooks/useReactions.ts     # emoji 反應狀態
 src/hooks/useSettings.ts      # 讀取 / 更新設定，訂閱跨分頁變更
 src/lib/summarizer.ts         # 內容擷取（Readability + 過濾式全頁擷取）
 src/lib/summaryCache.ts       # 半小時頁面摘要快取（依語氣 + 摘要類型分開存）
+src/lib/productPage.ts        # 商品頁偵測 / 定位商品說明 / 擷取內文 / SPA 路由事件
+src/lib/productSummary.ts     # Prompt API 包裝：結構化四區塊 JSON（responseConstraint）
+src/lib/productSummaryCache.ts# 商品摘要快取（依商品 id + 語氣分開存，24h TTL）
 src/lib/settings.ts           # 使用者設定：語氣 / 摘要類型 / 自動摘要
 src/lib/reactions.ts          # 反應 emoji 資料
 src/styles.ts                 # content script 的 Shadow DOM 樣式
+src/productSummaryStyles.ts   # 商品摘要卡片的 Shadow DOM 樣式
 src/popup/PopupApp.tsx        # 設定頁面元件
 src/popup/popup.css           # 設定頁面樣式（獨立頁面，非 Shadow DOM）
 src/popup/main.tsx            # popup 進入點
