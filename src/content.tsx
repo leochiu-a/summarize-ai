@@ -4,16 +4,20 @@
 
 import { createRoot } from 'react-dom/client'
 import { Buddy } from './Buddy'
+import { AVATAR_H, AVATAR_W, FRAMES } from './constants'
+import styles from './content.css?inline'
 import { startProductPageSummary } from './productPageSummary'
-import { styles } from './styles'
 
 // ── 小夥伴（全站，整頁摘要）──────────────────────────────────────
 const host = document.createElement('div')
 host.id = 'summarize-ai-buddy-host'
 const shadow = host.attachShadow({ mode: 'open' })
 
+// 把 sprite 尺寸以 CSS 變數注入 :host，content.css 內用 var() 取用
+const hostVars = `:host{--frames:${FRAMES};--avatar-w:${AVATAR_W}px;--avatar-h:${AVATAR_H}px}`
+
 const styleEl = document.createElement('style')
-styleEl.textContent = styles
+styleEl.textContent = hostVars + styles
 shadow.appendChild(styleEl)
 
 const mount = document.createElement('div')

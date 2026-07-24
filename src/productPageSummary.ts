@@ -18,7 +18,7 @@ import {
   onRouteChange,
   waitForDescSection,
 } from './lib/productPage'
-import { productSummaryStyles } from './productSummaryStyles'
+import productSummaryStyles from './productSummary.css?inline'
 
 // 探針等 hydration 的保險逾時：探針一直沒被洗掉（已 hydrate 或該頁不重繪）也直接注入
 const HYDRATION_WAIT_TIMEOUT_MS = 6000

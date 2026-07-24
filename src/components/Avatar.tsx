@@ -1,4 +1,4 @@
-import { FRAMES } from '../styles'
+import { FRAMES } from '../constants'
 
 const SPRITE_URL = chrome.runtime.getURL('assets/sprite.png')
 
