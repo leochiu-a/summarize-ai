@@ -3,6 +3,8 @@
 
 :host {
   all: initial;
+  /* 讓 height: auto 等關鍵字可參與 transition（泡泡內容高度是動態的）。Chrome 129+ */
+  interpolate-size: allow-keywords;
 }
 
 * {
@@ -43,8 +45,8 @@
 
 .bubble {
   width: min(380px, calc(100vw - 60px));
-  max-height: 55vh;
-  overflow-y: auto;
+  height: auto; /* 明確設 auto，height 才有可補間的目標值 */
+  overflow: hidden; /* 捲動交給內部 .bubble-body（OverlayScrollbars）；外框只負責裁切動畫 */
   background: #fffef8;
   border: 3px solid #26243a;
   border-radius: 10px;
@@ -54,13 +56,22 @@
   line-height: 1.75;
   color: #26243a;
   word-break: break-word;
+  /* 進場淡入上移；內容由 thinking→結果變高時，height 平滑補間（不再瞬間 reflow） */
+  transition: height 0.28s ease, padding 0.28s ease, opacity 0.22s ease, transform 0.22s ease;
 }
-.bubble::-webkit-scrollbar {
-  width: 8px;
+/* 泡泡首次出現那一刻的起始值：收合成 0、淡出、略下移，隨即過渡到自然高度 */
+@starting-style {
+  .bubble {
+    height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
-.bubble::-webkit-scrollbar-thumb {
-  background: #26243a55;
-  border-radius: 4px;
+/* 內文捲動區：高度上限在這裡，超過才由 OverlayScrollbars 浮層 scrollbar 接手 */
+.bubble-body {
+  max-height: calc(55vh - 40px); /* 扣掉 bubble padding 與標題列高度 */
 }
 
 .bubble-head {

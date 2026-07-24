@@ -1,3 +1,5 @@
+import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react'
 import { useCallback, useEffect, useRef, type ReactNode } from 'react'
 import {
   isBusy,
@@ -50,7 +52,7 @@ export function BuddyBubble({ view, onStart, onClose, onRerun, children }: Buddy
   const reactions = useReactions()
   const chatter = useThinkingChatter(thinking, thinkingLines)
   const frame = useTalkingMouth(thinking || (open && !done && !!content) || reactions.reacting)
-  const bubbleRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<OverlayScrollbarsComponentRef>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
 
   // tooltip 用 Popover API（渲染在 top layer，不會被泡泡的 overflow 裁掉）
@@ -70,10 +72,10 @@ export function BuddyBubble({ view, onStart, onClose, onRerun, children }: Buddy
     }
   }, [])
 
-  // 串流時自動捲到底
+  // 串流時自動捲到底（OverlayScrollbars 的實際捲動元素是它內部的 viewport）
   useEffect(() => {
-    const el = bubbleRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    const viewport = scrollerRef.current?.osInstance()?.elements().viewport
+    if (viewport) viewport.scrollTop = viewport.scrollHeight
   }, [content])
 
   const handleActivate = useCallback(() => {
@@ -99,7 +101,7 @@ export function BuddyBubble({ view, onStart, onClose, onRerun, children }: Buddy
     <div className="buddy">
       {open && (
         <>
-          <div className="bubble" ref={bubbleRef}>
+          <div className="bubble">
             <div className="bubble-head">
               <span className="title">{title}</span>
               {done && (
@@ -123,17 +125,25 @@ export function BuddyBubble({ view, onStart, onClose, onRerun, children }: Buddy
                 </span>
               )}
             </div>
-            {thinking && (
-              <div className={chatter.impatient ? 'thinking-text impatient' : 'thinking-text'}>
-                {chatter.line}
-              </div>
-            )}
-            {needsActivation && (
-              <div className="thinking-text">第一次要下載 AI 模型，再點我一下就開始囉。</div>
-            )}
-            {error && <div className="error">{error}</div>}
-            {children}
-            {done && <ReactionBar reaction={reactions.reaction} onReact={reactions.react} />}
+            {/* 內文交給 OverlayScrollbars：scrollbar 浮層、不佔布局，也不隨高度動畫閃現 */}
+            <OverlayScrollbarsComponent
+              ref={scrollerRef}
+              className="bubble-body"
+              defer
+              options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
+            >
+              {thinking && (
+                <div className={chatter.impatient ? 'thinking-text impatient' : 'thinking-text'}>
+                  {chatter.line}
+                </div>
+              )}
+              {needsActivation && (
+                <div className="thinking-text">第一次要下載 AI 模型，再點我一下就開始囉。</div>
+              )}
+              {error && <div className="error">{error}</div>}
+              {children}
+              {done && <ReactionBar reaction={reactions.reaction} onReact={reactions.react} />}
+            </OverlayScrollbarsComponent>
           </div>
           <div className="tail" />
         </>
