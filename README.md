@@ -45,13 +45,15 @@ Chrome extension：在 [kkday.com](https://kkday.com) 網頁右下角會出現�
 
 ## 開發
 
+本專案用 [pnpm](https://pnpm.io/)（`packageManager` 已鎖版本；`.npmrc` 設 `node-linker=hoisted`，讓 tsc 找得到型別）。
+
 ```bash
-npm install
-npm run build        # 產出 dist/
-npm run dev          # watch mode
-npm run typecheck    # tsc --noEmit
-npm test             # vitest（jsdom 環境）
-npm run test:watch   # vitest watch
+pnpm install
+pnpm run build        # 產出 dist/
+pnpm run dev          # watch mode
+pnpm run typecheck    # tsc --noEmit
+pnpm test             # vitest（jsdom 環境）
+pnpm run test:watch   # vitest watch
 ```
 
 測試分幾層：
@@ -64,7 +66,7 @@ npm run test:watch   # vitest watch
 - `src/lib/productSummaryCache.test.ts` — 商品摘要快取讀寫、語氣分開存、TTL。
 - `src/components/ProductSummaryCard.test.tsx` — 掛載自動產生並顯示摘要文字、模型不可用顯示錯誤、未下載時顯示按鈕點擊後才呼叫模型。
 
-`npm run build` 分兩階段：`vp build` 打包 content script（含 React runtime，輸出單一 IIFE `dist/content.js`），接著 `vp build --config vite.popup.config.ts` 打包 popup（一般 extension 頁面，可用 ESM，輸出 `dist/popup.html` + JS/CSS）。UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾；popup 是獨立頁面，用一般 `<link>`/`<style>` 即可。
+`pnpm run build` 分兩階段：`vp build` 打包 content script（含 React runtime，輸出單一 IIFE `dist/content.js`），接著 `vp build --config vite.popup.config.ts` 打包 popup（一般 extension 頁面，可用 ESM，輸出 `dist/popup.html` + JS/CSS）。UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾；popup 是獨立頁面，用一般 `<link>`/`<style>` 即可。
 
 ## 載入 extension
 
@@ -76,7 +78,7 @@ npm run test:watch   # vitest watch
 ## 打包成 zip（上架 / 分發）
 
 ```bash
-npm run package
+pnpm run package
 ```
 
 依序跑 typecheck → 測試 → build，最後用 [web-ext](https://github.com/mozilla/web-ext) 把 `dist/` 打包成 `release/summarize_ai_buddy-<version>.zip`（版本號讀自 `manifest.json`）。這個 zip 可以直接上傳到 [Chrome Web Store 開發者後台](https://chrome.google.com/webstore/devconsole)，或分享給別人手動安裝。`release/` 已列入 `.gitignore`，每次執行都會用 `--overwrite-dest` 覆蓋舊檔。
@@ -85,7 +87,7 @@ npm run package
 
 ## 本機預覽（免安裝 extension）
 
-`demo/` 底下有測試頁，stub 掉 `chrome.runtime` 與 `Summarizer`，可直接開 `demo/index.html`（文章頁）或 `demo/homepage.html`（非文章頁 + 垃圾過濾）看 UI 與擷取行為。需先 `npm run build`（demo 的 `content.js` 由 `dist/` 複製而來，已列入 `.gitignore`）。
+`demo/` 底下有測試頁，stub 掉 `chrome.runtime` 與 `Summarizer`，可直接開 `demo/index.html`（文章頁）或 `demo/homepage.html`（非文章頁 + 垃圾過濾）看 UI 與擷取行為。需先 `pnpm run build`（demo 的 `content.js` 由 `dist/` 複製而來，已列入 `.gitignore`）。
 
 ## 結構
 

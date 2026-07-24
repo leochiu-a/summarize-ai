@@ -141,6 +141,6 @@ https://leochiu-a.github.io/summarize-ai/privacy-policy.html
 - **企業強制安裝**：如果公司有用 Google Workspace 管理 Chrome，可透過 Google Admin 主控台
   把擴充功能推送給指定帳號，完全不用經過 Chrome Web Store 審核。
 - **直接分享 zip**：同事各自 `chrome://extensions` → 開發人員模式 → 載入未封裝項目
-  （或載入 `npm run package` 產出的 zip 解壓後的資料夾），適合人數少、更新頻繁的階段。
+  （或載入 `pnpm run package` 產出的 zip 解壓後的資料夾），適合人數少、更新頻繁的階段。
 
 如果之後還是想公開上架（例如未來要開放給更多 kkday 網域外的使用者），上面幾段文案都還適用。

@@ -51,7 +51,7 @@ to `NEW_VERSION`. Keep every other field untouched.
 ## Step 4: Verify and package
 
 ```bash
-npm run package
+pnpm run package
 ```
 
 This runs typecheck → tests → the two-stage build (content script + popup)
@@ -63,14 +63,14 @@ Step 6, never committed.)
 ## Step 5: Commit and tag
 
 ```bash
-git add package.json package-lock.json public/manifest.json
+git add package.json pnpm-lock.yaml public/manifest.json
 git commit -m "chore(release): bump version to <NEW_VERSION>
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git tag v<NEW_VERSION>
 ```
 
-Only include `package-lock.json` in the `git add` if it actually changed
+Only include `pnpm-lock.yaml` in the `git add` if it actually changed
 (a plain version bump normally doesn't touch it — check `git status` first).
 
 ## Step 6: Push and create the GitHub release

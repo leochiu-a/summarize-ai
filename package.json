@@ -9,12 +9,13 @@
     "dev": "rm -rf dist && DEV_WATCH=1 sh -c 'vp build --watch & vp build --watch --config vite.popup.config.ts & wait'",
     "typecheck": "tsc --noEmit",
     "test:watch": "vp test",
-    "package": "npm run typecheck && npm test && npm run build && web-ext build --source-dir dist --artifacts-dir release --overwrite-dest"
+    "package": "pnpm run typecheck && pnpm test && pnpm run build && web-ext build --source-dir dist --artifacts-dir release --overwrite-dest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "packageManager": "pnpm@10.16.1",
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
