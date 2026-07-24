@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Buddy } from './Buddy'
 import { resetSettingsCache, saveSettings } from './lib/settings'
 import { clearSummaryCache } from './lib/summaryCache'
+import { clearWorthItCache } from './lib/worthItCache'
 
 // 用一段夠長的文章塞進頁面，讓 extractContent 抽得到內容（需超過長度門檻）
 function seedArticle() {
@@ -43,12 +44,43 @@ function chunkStream(chunks: string[]): () => AsyncIterable<string> {
 }
 
 const avatar = () => screen.getByRole('button', { name: '點我摘要這個頁面' })
+const productAvatar = () => screen.getByRole('button', { name: '點我看這個商品值不值得買' })
+
+// 建立可控的 LanguageModel stub（值不值得買用 Prompt API）
+function stubLanguageModel(streamFactory: () => AsyncIterable<string>) {
+  const calls = { create: 0 }
+  vi.stubGlobal('LanguageModel', {
+    availability: async () => 'available',
+    create: async () => {
+      calls.create += 1
+      return { promptStreaming: () => streamFactory(), destroy: () => {} }
+    },
+  })
+  return calls
+}
+
+// 商品頁：設定 product 路徑 + 注入 Product JSON-LD，讓 worth 模式抓得到事實
+function seedProductPage() {
+  window.history.replaceState({}, '', '/zh-tw/product/138477')
+  const script = document.createElement('script')
+  script.type = 'application/ld+json'
+  script.textContent = JSON.stringify({
+    '@type': 'Product',
+    name: '釜山通行證 VISIT BUSAN PASS',
+    aggregateRating: { ratingValue: 4.83, reviewCount: 7228, bestRating: 5 },
+    offers: { '@type': 'AggregateOffer', lowPrice: 936, priceCurrency: 'TWD', offers: [] },
+  })
+  document.head.appendChild(script)
+}
 
 afterEach(async () => {
   cleanup()
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
+  document.head.querySelectorAll('script[type="application/ld+json"]').forEach((s) => s.remove())
+  window.history.replaceState({}, '', '/') // 路徑會影響 isProductPage，測試間重設
   await clearSummaryCache() // 快取以記憶體 fallback 保存，測試間需清掉
+  await clearWorthItCache()
   resetSettingsCache() // 設定也以記憶體 fallback 保存，測試間需清掉
 })
 
@@ -154,6 +186,36 @@ describe('Buddy 快取', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重新抓取' }))
     await waitFor(() => expect(calls.create).toBe(2))
+  })
+})
+
+describe('Buddy 商品頁「值不值得買」', () => {
+  it('商品頁點頭像 → 用 Prompt API 給出值不值得買判斷，標題切換', async () => {
+    seedProductPage()
+    stubLanguageModel(chunkStream(['值得下手，', '評分 4.83 又有免費取消']))
+    render(<Buddy />)
+
+    fireEvent.click(productAvatar())
+
+    // 串流內容出現、標題為「值不值得買」（不是「頁面摘要」）
+    await screen.findByText(/評分 4.83 又有免費取消/)
+    expect(screen.getByText('值不值得買')).toBeTruthy()
+    expect(screen.queryByText('頁面摘要')).toBeNull()
+    // done 後出現反應列
+    await screen.findByRole('button', { name: '讚' })
+  })
+
+  it('商品頁不呼叫整頁摘要的 Summarizer', async () => {
+    seedProductPage()
+    const lm = stubLanguageModel(chunkStream(['可以考慮']))
+    const summ = stubSummarizer(chunkStream(['不該出現的整頁摘要']))
+    render(<Buddy />)
+
+    fireEvent.click(productAvatar())
+    await screen.findByText(/可以考慮/)
+
+    expect(lm.create).toBe(1)
+    expect(summ.create).toBe(0) // 商品頁走 worth，不走整頁摘要
   })
 })
 

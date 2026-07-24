@@ -191,6 +191,11 @@
   color: #008cad;
 }
 
+/* 值不值得買：純文字判斷（非 Markdown），保留模型偶爾產生的換行 */
+.content.worth-text {
+  white-space: pre-wrap;
+}
+
 /* 摘要完成後的反應區 */
 .reactions {
   margin-top: 12px;
