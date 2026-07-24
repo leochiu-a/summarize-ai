@@ -12,7 +12,7 @@ function SparkleIcon() {
 
 // 自動摘要商品說明，串流顯示成一段話。掛載即執行。
 export function ProductSummaryCard() {
-  const { phase, data, error, fromCache, downloadPct, run } = useProductSummary()
+  const { phase, data, error, fromCache, run } = useProductSummary()
 
   useEffect(() => {
     run()
@@ -34,16 +34,11 @@ export function ProductSummaryCard() {
 
       {/* 還沒收到任何內容時才顯示 skeleton（檢查中，或生成中但第一塊還沒到） */}
       {(phase === 'checking' || (phase === 'generating' && !data)) && (
-        <>
-          {downloadPct > 0 && downloadPct < 100 && (
-            <div className="ps-loading">正在下載 AI 模型… {downloadPct}%</div>
-          )}
-          <div className="ps-skeleton">
-            <div className="ps-sk-line" />
-            <div className="ps-sk-line w70" />
-            <div className="ps-sk-line w50" />
-          </div>
-        </>
+        <div className="ps-skeleton">
+          <div className="ps-sk-line" />
+          <div className="ps-sk-line w70" />
+          <div className="ps-sk-line w50" />
+        </div>
       )}
 
       {phase === 'error' && <div className="ps-error">{error}</div>}

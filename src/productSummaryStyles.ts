@@ -46,7 +46,6 @@ export const productSummaryStyles = `
   .ps-raw { white-space: pre-wrap; word-break: break-word; font-size: 16px; line-height: 1.7; }
 
   /* loading skeleton */
-  .ps-loading { color: #4a6b73; font-size: 14px; margin-bottom: 10px; }
   .ps-skeleton { display: flex; flex-direction: column; gap: 8px; }
   .ps-sk-line {
     height: 12px;

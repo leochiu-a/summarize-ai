@@ -22,7 +22,6 @@ export interface ProductSummarizing {
   data: string | null // 摘要文字（串流時為累積到目前的內容）
   error: string
   fromCache: boolean
-  downloadPct: number // 0~100，第一次下載模型時 > 0
   // userInitiated：來自使用者點擊（有手勢），才允許在 downloadable 狀態觸發下載
   run: (opts?: { force?: boolean; userInitiated?: boolean }) => Promise<void>
 }
@@ -33,13 +32,11 @@ export function useProductSummary(): ProductSummarizing {
   const [data, setData] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
-  const [downloadPct, setDownloadPct] = useState(0)
 
   const run = useCallback(async ({ force = false, userInitiated = false } = {}) => {
     setError('')
     setData(null)
     setFromCache(false)
-    setDownloadPct(0)
     setPhase('checking')
 
     try {
@@ -80,6 +77,12 @@ export function useProductSummary(): ProductSummarizing {
       setPhase('generating')
       // 串流：每收到一塊就更新 data，讓卡片邊生成邊顯示（語氣沿用 popup 設定）
       const result = await generateProductSummary(text, tone, (acc) => setData(acc))
+      // 模型可能串流結束卻沒吐內容：別進 done（會顯示空白卡片），也別把空字串快取 24h
+      if (!result) {
+        setError('模型沒有產出摘要，稍後再試試看。')
+        setPhase('error')
+        return
+      }
       setData(result)
       setPhase('done')
       await setCachedProductSummary(productId, tone, result)
@@ -89,5 +92,5 @@ export function useProductSummary(): ProductSummarizing {
     }
   }, [])
 
-  return { phase, data, error, fromCache, downloadPct, run }
+  return { phase, data, error, fromCache, run }
 }

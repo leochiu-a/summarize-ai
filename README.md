@@ -60,9 +60,9 @@ npm run test:watch   # vitest watch
 - `src/lib/settings.test.ts` — 設定的預設值、merge、資料表完整性，以及**連續快速寫入不互相覆蓋**（同步 merge 在記憶體真相來源上，避免 popup 快速切換設定時只剩最後一次生效）。
 - `src/Buddy.test.tsx` — 元件狀態機（React Testing Library）：thinking→speaking→done 轉換、思考時被催的不耐煩回應與輪播、emoji 反應回嘴、快取命中 / 強制重跑、自動摘要設定生效與否。
 - `src/lib/productPage.test.ts` — 商品頁偵測、`#product-info-sec` / 標題反查定位、內文擷取濾雜訊、`onRouteChange` 只在 pathname 變動時觸發。
-- `src/lib/productSummary.test.ts` — stub `LanguageModel`：驗證語氣注入 system prompt、`responseConstraint` 傳入、JSON parse 與缺欄位補值、API 不支援時的錯誤。
+- `src/lib/productSummary.test.ts` — stub `LanguageModel`：驗證語氣注入指示、串流 chunks 累加、`create` 不帶選項、API 不支援時的錯誤。
 - `src/lib/productSummaryCache.test.ts` — 商品摘要快取讀寫、語氣分開存、TTL。
-- `src/components/ProductSummaryCard.test.tsx` — 掛載自動產生四區塊、模型不可用顯示錯誤、重新產生再次呼叫模型。
+- `src/components/ProductSummaryCard.test.tsx` — 掛載自動產生並顯示摘要文字、模型不可用顯示錯誤、未下載時顯示按鈕點擊後才呼叫模型。
 
 `npm run build` 分兩階段：`vp build` 打包 content script（含 React runtime，輸出單一 IIFE `dist/content.js`），接著 `vp build --config vite.popup.config.ts` 打包 popup（一般 extension 頁面，可用 ESM，輸出 `dist/popup.html` + JS/CSS）。UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾；popup 是獨立頁面，用一般 `<link>`/`<style>` 即可。
 
@@ -100,9 +100,9 @@ src/Buddy.tsx                 # 編排層：組合 hooks 與子元件、bubble �
 src/components/Avatar.tsx     # 小夥伴頭像（sprite 嘴型）
 src/components/ReactionBar.tsx# 反應 emoji 列
 src/components/EmojiIcon.tsx  # 共用 emoji 圖示：靜態 SVG + hover 動畫 webp
-src/components/ProductSummaryCard.tsx # 商品說明摘要卡片（四區塊 + loading / error 態）
+src/components/ProductSummaryCard.tsx # 商品說明摘要卡片（一段話 + skeleton / error 態）
 src/hooks/useSummarizer.ts    # 摘要流程 + 狀態機 + 快取 + 設定
-src/hooks/useProductSummary.ts# 商品摘要流程 + 狀態機（Prompt API，不串流）
+src/hooks/useProductSummary.ts# 商品摘要流程 + 狀態機（Prompt API，串流一段話）
 src/hooks/useThinkingChatter.ts # 思考碎念輪播 + 不耐煩回應
 src/hooks/useTalkingMouth.ts  # 講話嘴型動畫
 src/hooks/useReactions.ts     # emoji 反應狀態
@@ -110,7 +110,7 @@ src/hooks/useSettings.ts      # 讀取 / 更新設定，訂閱跨分頁變更
 src/lib/summarizer.ts         # 內容擷取（Readability + 過濾式全頁擷取）
 src/lib/summaryCache.ts       # 半小時頁面摘要快取（依語氣 + 摘要類型分開存）
 src/lib/productPage.ts        # 商品頁偵測 / 定位商品說明 / 擷取內文 / SPA 路由事件
-src/lib/productSummary.ts     # Prompt API 包裝：結構化四區塊 JSON（responseConstraint）
+src/lib/productSummary.ts     # Prompt API 包裝：串流輸出一段話（依語氣調整口吻）
 src/lib/productSummaryCache.ts# 商品摘要快取（依商品 id + 語氣分開存，24h TTL）
 src/lib/settings.ts           # 使用者設定：語氣 / 摘要類型 / 自動摘要
 src/lib/reactions.ts          # 反應 emoji 資料
