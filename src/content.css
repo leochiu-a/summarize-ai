@@ -131,6 +131,49 @@
   display: block;
 }
 
+/* 內容下方的行動按鈕區（review 用：幫我想想 / 套用到評論 / 重新潤飾）。
+   按鈕有往右下的硬陰影 + hover 位移，底/右須留白，否則會被 .bubble-body 的 overflow 裁掉。 */
+.bubble-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 2px 4px 5px 0; /* 留給陰影(2px)與 hover 上移(1px)的空間 */
+}
+.buddy-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+}
+/* 主要行動（幫我想想 / 套用到評論） */
+.buddy-btn.primary {
+  background: #00b3d1;
+  color: #fff;
+  box-shadow: 2px 2px 0 #26243a;
+}
+.buddy-btn.primary:hover {
+  transform: translateY(-1px);
+}
+.buddy-btn.primary:active {
+  transform: translateY(1px);
+  box-shadow: 1px 1px 0 #26243a;
+}
+/* 次要行動（重新潤飾） */
+.buddy-btn.ghost {
+  color: #26243a;
+  border: 2px solid #26243a55;
+}
+.buddy-btn.ghost:hover {
+  background: #26243a11;
+}
+
 /* tooltip：Popover API（top layer）+ CSS anchor positioning，錨在按鈕上方 */
 .tooltip {
   margin: 0;

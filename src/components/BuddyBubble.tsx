@@ -33,6 +33,11 @@ export interface BuddyBubbleProps {
   onClose: () => void // 收合並重置（泡泡展開時點頭像）
   onRerun: () => void // 強制重跑（略過快取）
   children: ReactNode // 內容主體（markdown / 純文字，由模式 component 自己渲染）
+  // ── 以下為選用（summary/worth 不傳，行為不變；review 用來做進頁提示與確認流程）──
+  openWhenIdle?: boolean // idle 也展開泡泡（一進頁面就主動顯示提示，不必先點頭像）
+  actions?: ReactNode // 內容下方的行動按鈕區（如「幫我想想」「套用到評論」）
+  showReactions?: boolean // done 時是否顯示 emoji 反應列（預設顯示；review 關掉）
+  showRerunButton?: boolean // done 時標題列是否顯示重跑鈕（預設顯示；review 用 actions 自訂）
 }
 
 // 重跑鈕文字：各模式一致，故寫死在外殼
@@ -40,9 +45,19 @@ const RERUN_LABEL = '重做'
 
 // buddy 的共用外殼：頭像、泡泡框、標題列、思考台詞、錯誤、反應列，以及 tooltip /
 // 動嘴 / 自動捲動 / 被催 nag 等純 UI 行為。模式差異全由 view 帶入。
-export function BuddyBubble({ view, onStart, onClose, onRerun, children }: BuddyBubbleProps) {
+export function BuddyBubble({
+  view,
+  onStart,
+  onClose,
+  onRerun,
+  children,
+  openWhenIdle = false,
+  actions,
+  showReactions = true,
+  showRerunButton = true,
+}: BuddyBubbleProps) {
   const { phase, title, thinkingLines, content, error, fromCache } = view
-  const open = isOpen(phase)
+  const open = isOpen(phase) || openWhenIdle // idle 也展開（進頁主動提示）
   const done = isDone(phase)
   const busy = isBusy(phase)
   const needsActivation = isNeedsActivation(phase)
@@ -83,14 +98,16 @@ export function BuddyBubble({ view, onStart, onClose, onRerun, children }: Buddy
       if (thinking) chatter.nag() // 思考中被催 → 回一句不耐煩的話
       return
     }
-    if (open) {
-      onClose() // 已展開 → 收合
+    // 真正有內容 / 已執行過（idle 以外）才收合；openWhenIdle 的進頁提示態不算，
+    // 這時點頭像等同點提示裡的按鈕 → 開始執行
+    if (isOpen(phase)) {
+      onClose()
       reactions.reset()
       return
     }
     reactions.reset()
     onStart()
-  }, [busy, thinking, open, chatter, onClose, onStart, reactions])
+  }, [busy, thinking, phase, chatter, onClose, onStart, reactions])
 
   const handleRerun = useCallback(() => {
     reactions.reset()
@@ -104,7 +121,7 @@ export function BuddyBubble({ view, onStart, onClose, onRerun, children }: Buddy
           <div className="bubble">
             <div className="bubble-head">
               <span className="title">{title}</span>
-              {done && (
+              {done && showRerunButton && (
                 <span className="bubble-actions">
                   {fromCache && <span className="cache-badge">快取</span>}
                   <button
@@ -142,7 +159,10 @@ export function BuddyBubble({ view, onStart, onClose, onRerun, children }: Buddy
               )}
               {error && <div className="error">{error}</div>}
               {children}
-              {done && <ReactionBar reaction={reactions.reaction} onReact={reactions.react} />}
+              {actions && <div className="bubble-cta">{actions}</div>}
+              {done && showReactions && (
+                <ReactionBar reaction={reactions.reaction} onReact={reactions.react} />
+              )}
             </OverlayScrollbarsComponent>
           </div>
           <div className="tail" />

@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ReviewBuddy } from './components/ReviewBuddy'
 import { SummaryBuddy } from './components/SummaryBuddy'
 import { WorthBuddy } from './components/WorthBuddy'
 import { isProductPage, onRouteChange } from './lib/productPage'
+import { isReviewPage } from './lib/reviewPage'
 import { getSettings } from './lib/settings'
 
-// buddy 的兩種工作：
-// - summary：整頁摘要（非商品頁的預設）
+// buddy 的三種工作：
+// - review：評論頁專屬「幫你潤飾評論」（讀輸入框文字，潤飾後寫回）
 // - worth：商品頁專屬「值不值得買」判斷
+// - summary：整頁摘要（其餘頁面的預設）
 // 每個模式是一個自足的 component（自己持有 hook、自己實作流程），Buddy 只負責「選誰上場」。
-type Mode = 'summary' | 'worth'
+type Mode = 'review' | 'worth' | 'summary'
 
 function modeForPage(): Mode {
-  return isProductPage() ? 'worth' : 'summary'
+  if (isReviewPage()) return 'review'
+  if (isProductPage()) return 'worth'
+  return 'summary'
 }
 
 export function Buddy() {
@@ -38,9 +43,8 @@ export function Buddy() {
   // Buddy 用它決定換頁時可否切模式。
   const onActiveChange = useCallback((v: boolean) => setActive(v), [])
 
-  return mode === 'worth' ? (
-    <WorthBuddy autoStart={autoStart} onActiveChange={onActiveChange} />
-  ) : (
-    <SummaryBuddy autoStart={autoStart} onActiveChange={onActiveChange} />
-  )
+  if (mode === 'review') return <ReviewBuddy onActiveChange={onActiveChange} />
+  if (mode === 'worth')
+    return <WorthBuddy autoStart={autoStart} onActiveChange={onActiveChange} />
+  return <SummaryBuddy autoStart={autoStart} onActiveChange={onActiveChange} />
 }
