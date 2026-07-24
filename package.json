@@ -6,7 +6,7 @@
   "scripts": {
     "test": "vp test run",
     "build": "vp build && vp build --config vite.popup.config.ts",
-    "dev": "vp build --watch",
+    "dev": "rm -rf dist && DEV_WATCH=1 sh -c 'vp build --watch & vp build --watch --config vite.popup.config.ts & wait'",
     "typecheck": "tsc --noEmit",
     "test:watch": "vp test",
     "package": "npm run typecheck && npm test && npm run build && web-ext build --source-dir dist --artifacts-dir release --overwrite-dest"
