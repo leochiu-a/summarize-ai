@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   extractDescText,
   findDescSection,
+  findReviewButtonAnchor,
+  findReviewSection,
+  findReviewTitle,
   getProductId,
   isProductPage,
   onRouteChange,
@@ -68,6 +71,57 @@ describe('findDescSection / extractDescText', () => {
       </div>`
     const section = findDescSection()
     expect(section?.classList.contains('info-section')).toBe(true)
+  })
+})
+
+describe('findReviewSection / findReviewTitle', () => {
+  it('用 #review-sec 定位評論區，並取得標題節點', () => {
+    document.body.innerHTML = `
+      <div id="review-sec" class="info-section review-section">
+        <h2 class="info-title">Reviews</h2>
+        <div class="review-section__comments"></div>
+      </div>`
+    const section = findReviewSection()
+    expect(section?.id).toBe('review-sec')
+    expect(findReviewTitle(section!)?.textContent).toBe('Reviews')
+  })
+
+  it('沒有 id 時退回用「Reviews / 評論」標題反查外框', () => {
+    document.body.innerHTML = `
+      <div class="info-section">
+        <h2 class="info-title">評論</h2>
+      </div>`
+    const section = findReviewSection()
+    expect(section?.classList.contains('info-section')).toBe(true)
+  })
+
+  it('沒有評論區時回 null', () => {
+    document.body.innerHTML = `<div class="info-section"><h2>商品說明</h2></div>`
+    expect(findReviewSection()).toBeNull()
+  })
+})
+
+describe('findReviewButtonAnchor', () => {
+  it('有評論列表時 → 錨定列表、插在它前面（評分之後、列表之上，不切斷標題→評分）', () => {
+    document.body.innerHTML = `
+      <div id="review-sec" class="info-section review-section">
+        <h2 class="info-title">Reviews</h2>
+        <div class="review-section__header-container">4.8 Excellent</div>
+        <div class="review-section__comments"></div>
+      </div>`
+    const anchor = findReviewButtonAnchor(findReviewSection()!)
+    expect(anchor?.position).toBe('before')
+    expect(anchor?.node.classList.contains('review-section__comments')).toBe(true)
+  })
+
+  it('沒有評論列表時 → 退回標題、插在它後面', () => {
+    document.body.innerHTML = `
+      <div id="review-sec" class="info-section">
+        <h2 class="info-title">Reviews</h2>
+      </div>`
+    const anchor = findReviewButtonAnchor(findReviewSection()!)
+    expect(anchor?.position).toBe('after')
+    expect(anchor?.node.tagName).toBe('H2')
   })
 })
 

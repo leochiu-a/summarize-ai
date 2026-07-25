@@ -1,0 +1,63 @@
+/* 「翻譯所有評論」按鈕的 Shadow DOM 樣式（隔離宿主頁面 CSS）。 */
+/* 視覺：淡青單色底 + 青→藍漸層文字/icon，呼應商品摘要卡片的漸層標題。 */
+/* 刻意輕巧：小尺寸、無粗邊框，輔助功能不搶主要動線。 */
+
+:host {
+  all: initial;
+  display: block;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.review-translate {
+  margin: 4px 0 16px;
+  font-family: "Noto Sans TC", -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+.review-translate__btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  /* 淡青單色底（很淡），讓它可被辨識為擴充功能但不搶戲 */
+  background: #f0fbfd;
+  border-radius: 999px;
+  padding: 6px 14px;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.review-translate__btn:hover {
+  background: #e4f7fb;
+}
+.review-translate__btn:active {
+  transform: scale(0.98);
+}
+.review-translate__btn[disabled],
+.review-translate__btn[aria-busy="true"] {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* 文字用青→藍漸層（與商品摘要卡片標題同一條漸層），AI 感來自漸層本身 */
+.review-translate__label {
+  background: linear-gradient(90deg, #10d5e3, #2ec4f2 50%, #4daaf7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.review-translate__icon {
+  flex: none;
+}
+
+.review-translate__error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #b45309;
+}

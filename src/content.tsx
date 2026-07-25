@@ -7,6 +7,7 @@ import overlayScrollbarsStyles from 'overlayscrollbars/overlayscrollbars.css?inl
 import { Buddy } from './Buddy'
 import { AVATAR_H, AVATAR_W, FRAMES } from './constants'
 import styles from './content.css?inline'
+import { startProductPageReviews } from './productPageReviews'
 import { startProductPageSummary } from './productPageSummary'
 
 // ── 小夥伴（全站，整頁摘要）──────────────────────────────────────
@@ -30,3 +31,6 @@ createRoot(mount).render(<Buddy />)
 
 // ── 商品頁專屬：AI 商品重點摘要卡片 ──────────────────────────────
 startProductPageSummary()
+
+// ── 商品頁專屬：一鍵翻譯所有評論 ────────────────────────────────
+startProductPageReviews()

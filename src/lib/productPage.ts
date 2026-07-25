@@ -5,6 +5,9 @@
 // 商品說明區塊在其它模組要注入卡片時的 sentinel（去重、擷取時排除自己）
 export const PRODUCT_SUMMARY_HOST_ID = 'summarize-ai-product-summary-host'
 
+// 評論區「翻譯所有評論」按鈕的 host id（去重）
+export const REVIEW_TRANSLATE_HOST_ID = 'summarize-ai-review-translate-host'
+
 // 商品說明內文截斷（Prompt API context window 有限，敘述通常 1~3k 字就夠）
 const MAX_CHARS = 6000
 
@@ -34,6 +37,80 @@ export function findDescSection(): HTMLElement | null {
 // 商品說明標題節點（卡片要插在它後面）
 export function findDescTitle(section: HTMLElement): HTMLElement | null {
   return section.querySelector<HTMLElement>('h2.info-title, h2')
+}
+
+// 定位評論區塊。優先用相對穩定的 id（#review-sec），退回用「Reviews / 評論」標題反查外框。
+// 同樣不綁 Vue 的 data-v-* 或樣式 class（改版會變）。
+export function findReviewSection(): HTMLElement | null {
+  const byId = document.querySelector<HTMLElement>('#review-sec')
+  if (byId) return byId
+
+  const title = [...document.querySelectorAll<HTMLElement>('h2.info-title, h2')].find((h) =>
+    /reviews?|評論|評價/i.test(h.textContent || ''),
+  )
+  return (title?.closest('.info-section') as HTMLElement) ?? null
+}
+
+// 評論區標題節點
+export function findReviewTitle(section: HTMLElement): HTMLElement | null {
+  return section.querySelector<HTMLElement>('h2.info-title, h2')
+}
+
+// 「翻譯所有評論」按鈕的插入錨點。
+// 評論區結構：標題 → 評分 header(review-section__header-container) → 分隔線 → 評論列表(__comments)。
+// 按鈕要放在「評論列表正上方」，不要卡在標題與評分之間（會切斷「標題→評分」的視覺關係）。
+// 回傳一個節點，呼叫端把 host 插在它「前面」；找不到列表就退回標題（插在標題後面）。
+export function findReviewButtonAnchor(section: HTMLElement): {
+  node: HTMLElement
+  position: 'before' | 'after'
+} | null {
+  const comments = section.querySelector<HTMLElement>('.review-section__comments')
+  if (comments) return { node: comments, position: 'before' }
+  const title = findReviewTitle(section)
+  if (title) return { node: title, position: 'after' }
+  return null
+}
+
+// 等評論區塊出現（SPA 首次 render / 捲到才載入時可能晚於 content script）。
+// 已存在則同步回呼；否則 MutationObserver 觀察，逾時放棄。回傳解除函式。
+export function waitForReviewSection(
+  cb: (section: HTMLElement) => void,
+  timeoutMs = 15000,
+): () => void {
+  const existing = findReviewSection()
+  if (existing) {
+    cb(existing)
+    return () => {}
+  }
+
+  let done = false
+  const finish = (section: HTMLElement) => {
+    if (done) return
+    done = true
+    cleanup()
+    cb(section)
+  }
+
+  const observer = new MutationObserver(() => {
+    const section = findReviewSection()
+    if (section) finish(section)
+  })
+  observer.observe(document.documentElement, { childList: true, subtree: true })
+
+  const timer = setTimeout(() => {
+    done = true
+    cleanup()
+  }, timeoutMs)
+
+  function cleanup() {
+    observer.disconnect()
+    clearTimeout(timer)
+  }
+
+  return () => {
+    done = true
+    cleanup()
+  }
 }
 
 // 擷取商品說明內文：clone 後移除雜訊與我們自己注入的卡片，去掉標題文字，取可見文字。
