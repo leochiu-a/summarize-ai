@@ -122,10 +122,15 @@ function readCardText(body: HTMLElement): string {
 // LanguageDetector 是單例（一顆就能偵測所有語言），建立一次重複使用
 let detectorPromise: Promise<LanguageDetector> | null = null
 
-// LanguageDetector 是否可用 / 需下載
+// LanguageDetector 是否可用 / 需下載。API 不存在或 availability 拋錯一律視為 unavailable
+// （兜底：呼叫端據此決定要不要注入按鈕，不能讓例外變成 unhandled rejection 或整個功能消失）。
 export async function detectorAvailability(): Promise<Availability> {
   if (typeof LanguageDetector === 'undefined') return 'unavailable'
-  return LanguageDetector.availability()
+  try {
+    return await LanguageDetector.availability()
+  } catch {
+    return 'unavailable'
+  }
 }
 
 // 取得（或建立）LanguageDetector。onProgress 回報模型下載進度（0~1）。

@@ -3,6 +3,7 @@ import {
   TRANSLATION_NODE_ATTR,
   collectReviewCards,
   detectLanguage,
+  detectorAvailability,
   hasInjectedTranslations,
   injectTranslation,
   sameLanguage,
@@ -26,6 +27,7 @@ function seedCard(title: string, body: string): HTMLElement {
 afterEach(() => {
   document.body.innerHTML = ''
   document.documentElement.removeAttribute('lang')
+  vi.unstubAllGlobals()
 })
 
 describe('targetLanguage', () => {
@@ -113,6 +115,27 @@ describe('collectReviewCards', () => {
 
     const cards = collectReviewCards()
     expect(cards[0].text).toBe('原文內容') // 不含 'translated content'
+  })
+})
+
+describe('detectorAvailability（兜底：例外一律視為 unavailable）', () => {
+  it('LanguageDetector 不存在 → unavailable', async () => {
+    vi.stubGlobal('LanguageDetector', undefined)
+    expect(await detectorAvailability()).toBe('unavailable')
+  })
+
+  it('availability() 拋錯 → unavailable（不 reject，避免按鈕永不注入）', async () => {
+    vi.stubGlobal('LanguageDetector', {
+      availability: async () => {
+        throw new Error('boom')
+      },
+    })
+    await expect(detectorAvailability()).resolves.toBe('unavailable')
+  })
+
+  it('正常時回傳其 availability', async () => {
+    vi.stubGlobal('LanguageDetector', { availability: async () => 'available' })
+    expect(await detectorAvailability()).toBe('available')
   })
 })
 
