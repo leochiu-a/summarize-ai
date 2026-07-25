@@ -36,16 +36,23 @@ describe('ConsentBuddy（同意才下載）', () => {
     expect(screen.getByRole('button', { name: '下載並啟用' })).toBeTruthy()
   })
 
-  it('點「下載並啟用」→ 觸發下載，完成後顯示已就緒', async () => {
+  it('點「下載並啟用」→ 觸發下載，完成後顯示已就緒 +「開始使用」按鈕，點它才交棒', async () => {
     setGateAvailabilityForTest('downloadable')
     const calls = stubLanguageModel('available') // 下載完成後 refresh 讀到 available
-    render(<ConsentBuddy />)
+    const onReady = vi.fn()
+    render(<ConsentBuddy onReady={onReady} />)
 
     fireEvent.click(screen.getByRole('button', { name: '下載並啟用' }))
 
+    // 下載完成：顯示已就緒 + 明確的「開始使用」按鈕（不再靠隱晦的點頭像）
     await waitFor(() => expect(screen.getByText(/下載完成，已就緒/)).toBeTruthy())
     expect(calls.create).toBe(1)
     expect(calls.destroy).toBe(1)
+    const startBtn = screen.getByRole('button', { name: '開始使用' })
+    expect(onReady).not.toHaveBeenCalled() // 還沒點，不交棒
+
+    fireEvent.click(startBtn)
+    expect(onReady).toHaveBeenCalled() // 點「開始使用」才交棒
   })
 
   it('模型已就緒 → 不擋，直接交棒（onReady 被呼叫、自己不渲染提示）', async () => {

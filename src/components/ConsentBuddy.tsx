@@ -9,6 +9,7 @@
 import { useEffect } from 'react'
 import { useModelGate } from '../hooks/useModelGate'
 import { Avatar } from './Avatar'
+import { EmojiIcon } from './EmojiIcon'
 
 // idle 時頭像停在第 0 影格（閉嘴）
 const IDLE_FRAME = 0
@@ -63,15 +64,27 @@ export function ConsentBuddy({ onReady }: { onReady?: () => void }) {
           )}
 
           {gate.state === 'done' && (
-            <div className="thinking-text">下載完成，已就緒！點我就可以開始使用了 🎉</div>
+            <>
+              <div className="consent-done">
+                <span className="consent-done-emoji">
+                  <EmojiIcon code="1f61c" label="完成" />
+                </span>
+                <span>下載完成，已就緒！</span>
+              </div>
+              <div className="bubble-cta">
+                <button type="button" className="buddy-btn primary" onClick={() => onReady?.()}>
+                  開始使用
+                </button>
+              </div>
+            </>
           )}
 
           {gate.state === 'error' && <div className="error">{gate.error}</div>}
         </div>
       </div>
       <div className="tail" />
-      {/* done 時點頭像 = 交棒給功能 buddy；其餘狀態頭像不觸發（consent 靠泡泡按鈕） */}
-      <Avatar frame={IDLE_FRAME} onActivate={gate.state === 'done' ? () => onReady?.() : () => {}} />
+      {/* consent 流程全程靠泡泡裡的按鈕操作（下載並啟用 / 開始使用），頭像不觸發 */}
+      <Avatar frame={IDLE_FRAME} onActivate={() => {}} />
     </div>
   )
 }
