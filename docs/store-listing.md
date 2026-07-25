@@ -10,10 +10,10 @@
 
 **這一段就是後台「Summary from package」自動帶出來的文字**——它直接讀取 `public/manifest.json`
 的 `"description"` 欄位，不是表單裡另外填的獨立欄位，也沒辦法在後台直接編輯，要改字就是改
-manifest 再重新上傳套件。目前 68 字元，在上限內：
+manifest 再重新上傳套件。目前約 96 字元，在上限內：
 
 ```text
-在 kkday.com 網頁右下角召喚 pixel 小夥伴，用 Chrome 內建 AI 幫你摘要頁面內容，語氣任選、全程本機運算不上傳
+kkday.com 專屬 pixel 小夥伴：用 Chrome 內建 AI 摘要頁面、生成商品重點、潤飾與翻譯評論、分析值不值得買，全程裝置端運算不上傳
 ```
 
 ## 詳細描述（Detailed description）
@@ -22,27 +22,30 @@ manifest 再重新上傳套件。目前 68 字元，在上限內：
 直接從小夥伴的個性與功能清單切入：
 
 ```text
-會碎念、會動嘴講話，看完摘要還會用表情回你一句話——這不是普通的摘要工具，是一個有個性的 pixel 小夥伴。不管是落落長的文章，還是資訊爆炸的列表頁，點一下都能快速幫你抓到重點。
+會碎念、會動嘴講話，看完還會用表情回你一句話——這不是普通的工具，是一個住在 kkday.com 右下角、有個性的 pixel 小夥伴。從讀文章、看商品、寫評論到決定要不要買，它都用 Chrome 內建的 on-device AI 在旁邊幫你一把。
 
 【功能特色】
 
-• 一鍵摘要：點擊小夥伴，自動擷取當前頁面內容並生成摘要，串流輸出、即時顯示
+• 一鍵頁面摘要：點擊小夥伴，自動擷取當前頁面內容並生成摘要，串流輸出、即時顯示；不管是落落長的文章還是資訊爆炸的列表頁，點一下就抓到重點
+• 商品重點摘要：進到商品頁時，自動在「商品說明」下方生成一段話，告訴你這是什麼商品、適合哪種旅客
+• 值不值得買：在商品頁請小夥伴綜合評分、價格、折扣等資訊，給你「結論先行＋簡短理由」的購買建議
+• 評論潤飾：在評論撰寫頁，幫你把已經寫好的評論順稿、潤飾（只順句、不杜撰）；要不要採用由你決定，絕不代你送出
+• 一鍵翻譯評論：把其他國家旅客留下的外語評論，就地翻成你正在閱讀的語言，可隨時切換原文／譯文
 • 六種語氣任選：幽默、正經、溫柔、熱血、厭世、文青，摘要用你喜歡的口吻呈現
 • 四種摘要類型：重點條列、懶人包、開場白、標題，依需求切換
-• 每頁自動摘要：開啟後，打開網頁小夥伴就自動先幫你讀好
-• 智慧快取：同一頁面 30 分鐘內重新開啟直接顯示上次的摘要，不用重跑
+• 智慧快取：同一頁面短時間內重新開啟直接顯示上次的結果，不用重跑
 • emoji 互動反應：看完摘要按個表情，小夥伴會用他的個性回你一句話
 
 【隱私優先，全程本機運算】
 
-摘要由 Chrome 瀏覽器內建的 on-device AI 模型（Gemini Nano）直接在你的裝置上運算完成，頁面內容與產生的摘要都不會被傳送到任何伺服器——包含我們自己的伺服器在內，因為我們根本沒有經營任何伺服器。所有設定與快取只存在你自己的瀏覽器裡。完整說明請見隱私權政策。
+所有摘要、商品分析、評論潤飾與翻譯，都由 Chrome 瀏覽器內建的 on-device AI 模型（Gemini Nano 等）直接在你的裝置上運算完成，頁面內容與產生的結果都不會被傳送到任何伺服器——包含我們自己的伺服器在內，因為我們根本沒有經營任何伺服器。所有設定與快取只存在你自己的瀏覽器裡。完整說明請見隱私權政策。
 
 【使用需求】
 
 • 僅在 kkday.com（含子網域）上運作，其他網站不會出現小夥伴
-• Chrome 138 以上版本（Summarizer API 內建於穩定版）
+• Chrome 138 以上版本（內建 AI API 已進穩定版）
 • 裝置需符合內建 AI 的硬體需求（約 4GB 以上顯示記憶體、22GB 以上可用儲存空間）
-• 第一次使用會自動下載 AI 模型，之後即可離線使用
+• 第一次使用某項功能時，會徵求你同意後才下載對應的 AI 模型，下載完成後即可離線使用
 
 有任何問題或建議，歡迎到 GitHub 提出：
 https://github.com/leochiu-a/summarize-ai
@@ -50,10 +53,10 @@ https://github.com/leochiu-a/summarize-ai
 
 ## 單一用途說明（Single purpose description）
 
-審核表單會要求一句話說明這個 extension 只做一件事：
+審核表單會要求一句話說明這個 extension 只做一件事。功能雖然有摘要／商品分析／評論潤飾／翻譯多項，但都收斂在「用內建 AI 協助使用者在 kkday.com 上閱讀與撰寫內容」這個單一用途底下：
 
 ```text
-擷取使用者目前瀏覽的頁面內容，並使用瀏覽器內建的 on-device AI 生成摘要供使用者閱讀。
+在 kkday.com 上使用瀏覽器內建的 on-device AI，協助使用者理解與撰寫頁面內容：摘要頁面與商品資訊、生成購買建議，並潤飾與翻譯評論。全部功能都圍繞「輔助閱讀與撰寫 kkday 內容」這個單一用途。
 ```
 
 ## Permission justification（權限用途說明）
@@ -68,12 +71,17 @@ https://github.com/leochiu-a/summarize-ai
 
 ```text
 This extension displays an interactive avatar in the corner of pages on
-kkday.com (including its subdomains) and, only when the user clicks it,
-reads the current page's visible text content to generate a summary using
-Chrome's built-in on-device Summarizer API. Host permission is limited to
-kkday.com and its subdomains only — the extension does not run on, and has
-no access to, any other website. No page content is transmitted anywhere —
-summarization runs entirely on-device.
+kkday.com (including its subdomains). It reads the current page's visible
+text content to power on-device AI features: summarizing the page (on
+click), summarizing a product's description and giving a "worth it?"
+buying suggestion on product pages, polishing the user's own draft review
+on review-writing pages, and translating other travelers' reviews into the
+user's language on product pages. All of this uses Chrome's built-in
+on-device AI (Summarizer, Prompt/LanguageModel, Rewriter, Translator and
+LanguageDetector). Host permission is limited to kkday.com and its
+subdomains only — the extension does not run on, and has no access to, any
+other website. No page content is transmitted anywhere — all processing
+runs entirely on-device.
 ```
 
 ### storage justification（對應 `"permissions": ["storage"]`）
@@ -81,13 +89,13 @@ summarization runs entirely on-device.
 ```text
 The storage permission is used to save the user's own preferences locally
 via chrome.storage.local: their chosen tone (humorous, serious, gentle,
-passionate, cynical, literary), summary type (key points, TL;DR, teaser,
-headline), and whether to auto-summarize every page. It also stores a
-short-lived (30-minute) local cache of previously generated summaries,
-keyed by page URL, so revisiting the same page doesn't unnecessarily
-re-run the on-device AI model. All of this data stays on the user's
-device via chrome.storage.local — nothing is transmitted to any server,
-and it is cleared automatically when the extension is removed.
+passionate, cynical, literary) and summary type (key points, TL;DR, teaser,
+headline). It also stores a short-lived local cache of previously generated
+results — page summaries (30 minutes, keyed by page URL) and product
+summaries (24 hours, keyed by product ID) — so revisiting the same page
+doesn't unnecessarily re-run the on-device AI model. All of this data stays
+on the user's device via chrome.storage.local — nothing is transmitted to
+any server, and it is cleared automatically when the extension is removed.
 ```
 
 ## Privacy policy URL
@@ -113,9 +121,9 @@ https://leochiu-a.github.io/summarize-ai/privacy-policy.html
 | Authentication information | 否 | 不適用 |
 | Personal communications | 否 | 不適用 |
 | Location | 否 | 不適用 |
-| **Web history** | **是** | `summaryCache.ts` 把「網址＋頁面標題＋時間戳記」存在本機 30 分鐘，對應範例「頁面清單、標題、造訪時間」 |
-| User activity | 否 | 只監聽自己 UI 元件（頭像／emoji 按鈕）的點擊，不追蹤頁面上的滑鼠／捲動／按鍵 |
-| **Website content** | **是** | 核心功能：讀取當前頁面文字內容以產生摘要 |
+| **Web history** | **是** | 快取把「網址／商品 id＋頁面標題＋時間戳記」存在本機（頁面摘要 30 分鐘、商品摘要 24 小時），對應範例「頁面清單、標題、造訪時間」 |
+| User activity | 否 | 只監聽自己 UI 元件（頭像／emoji／翻譯按鈕）的點擊，不追蹤頁面上的滑鼠／捲動／按鍵 |
+| **Website content** | **是** | 核心功能：讀取當前頁面文字內容（頁面正文、商品說明、他人評論）以產生摘要、購買建議與翻譯；使用者自己撰寫中的評論文字也會讀取以進行潤飾。全部僅在本機處理 |
 
 三個「I certify」勾選框都勾選——資料不賣給第三方、用途不超出摘要這個單一用途、
 不涉及信用評分或放貸，這三項對本專案都成立。
