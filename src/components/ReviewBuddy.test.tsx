@@ -111,6 +111,27 @@ describe('ReviewBuddy 潤飾流程', () => {
   })
 })
 
+describe('ReviewBuddy 收合', () => {
+  it('待確認時點頭像 → 直接關掉泡泡，不彈回引導提示', async () => {
+    seedReviewPage()
+    stubRewriter(chunkStream(['潤飾後的內容']))
+    render(<ReviewBuddy />)
+    const el = document.querySelector('textarea')! as HTMLTextAreaElement
+    typeInto(el, '原始'.repeat(30))
+
+    await waitFor(() => screen.getByRole('button', { name: '幫我想想怎麼寫' }))
+    fireEvent.click(screen.getByRole('button', { name: '幫我想想怎麼寫' }))
+    await screen.findByText(/潤飾後的內容/)
+
+    // 點頭像 → 泡泡收起：結果與標題都消失，且不會冒出引導提示
+    fireEvent.click(avatar())
+    await waitFor(() => expect(screen.queryByText(/潤飾後的內容/)).toBeNull())
+    expect(screen.queryByText('幫你潤飾評論')).toBeNull()
+    expect(screen.queryByText(/這次體驗如何/)).toBeNull()
+    expect(screen.queryByText(/寫得很棒/)).toBeNull()
+  })
+})
+
 describe('ReviewBuddy 快取：原文沒變不重跑', () => {
   it('原文相同再次潤飾 → 直接用上次結果，不重呼叫模型', async () => {
     seedReviewPage()

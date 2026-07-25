@@ -48,6 +48,8 @@ export function ReviewBuddy({
   const review = useReviewRewrite()
   const { phase } = review
   const [draftLen, setDraftLen] = useState(0)
+  // 使用者主動關掉泡泡（點頭像）→ 收起，不再靠 openWhenIdle 彈回提示；再點頭像才重開。
+  const [dismissed, setDismissed] = useState(false)
 
   // 監聽使用者輸入長度。用 debounce(400ms)：連續打字時不更新（提示不抖、打字機不重打），
   // 停筆一下才更新字數 → 切換提示 → buddy 才「回話」。像真人：你在寫時它安靜，你停了它才搭話。
@@ -67,9 +69,17 @@ export function ReviewBuddy({
     onActiveChange?.(isOpen(phase))
   }, [phase, onActiveChange])
 
-  // 點「幫我想想」/ 點頭像 = 潤飾使用者目前寫的評論（點擊是使用者手勢，允許觸發模型下載）
-  const onStart = useCallback(() => void review.run({ userInitiated: true }), [review])
-  const onRerun = useCallback(() => void review.run({ userInitiated: true }), [review])
+  // 潤飾使用者目前寫的評論（「幫我想想」/「重新潤飾」按鈕用；點擊是使用者手勢，允許觸發模型下載）
+  const doRewrite = useCallback(() => void review.run({ userInitiated: true }), [review])
+
+  // 點頭像收合泡泡：標記 dismissed（壓過 openWhenIdle，真的收起），並重置狀態
+  const onClose = useCallback(() => {
+    setDismissed(true)
+    review.reset()
+  }, [review])
+
+  // 收合後再點頭像：重新打開提示（un-dismiss），不是直接潤飾
+  const onReopen = useCallback(() => setDismissed(false), [])
 
   const data = review.data ?? ''
   const idlePrompt = phase === 'idle'
@@ -83,7 +93,7 @@ export function ReviewBuddy({
   const actions =
     idlePrompt && prompt.canRewrite ? (
       // 寫夠了才出現：引導使用者交給 buddy 潤飾
-      <button type="button" className="buddy-btn primary" onClick={onStart}>
+      <button type="button" className="buddy-btn primary" onClick={doRewrite}>
         幫我想想怎麼寫
       </button>
     ) : awaitingConfirm ? (
@@ -91,7 +101,7 @@ export function ReviewBuddy({
         <button type="button" className="buddy-btn primary" onClick={review.apply}>
           套用到評論
         </button>
-        <button type="button" className="buddy-btn ghost" onClick={onRerun}>
+        <button type="button" className="buddy-btn ghost" onClick={doRewrite}>
           重新潤飾
         </button>
       </>
@@ -107,10 +117,10 @@ export function ReviewBuddy({
         error: phase === 'error' ? review.error : '',
         fromCache: false,
       }}
-      onStart={onStart}
-      onClose={review.reset}
-      onRerun={onRerun}
-      openWhenIdle // 一進評論頁就主動顯示提示
+      onStart={onReopen}
+      onClose={onClose}
+      onRerun={doRewrite}
+      openWhenIdle={!dismissed} // 一進評論頁就主動顯示提示；使用者收合後不再彈回
       actions={actions}
       showReactions={false} // 評論潤飾不需要 emoji 反應列
       showRerunButton={false} // 重跑改用 actions 裡的「重新潤飾」

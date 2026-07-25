@@ -98,16 +98,15 @@ export function BuddyBubble({
       if (thinking) chatter.nag() // 思考中被催 → 回一句不耐煩的話
       return
     }
-    // 真正有內容 / 已執行過（idle 以外）才收合；openWhenIdle 的進頁提示態不算，
-    // 這時點頭像等同點提示裡的按鈕 → 開始執行
-    if (isOpen(phase)) {
+    // 泡泡目前有顯示（含 openWhenIdle 的提示態）→ 點頭像就收合；否則點頭像 = 開始
+    if (open) {
       onClose()
       reactions.reset()
       return
     }
     reactions.reset()
     onStart()
-  }, [busy, thinking, phase, chatter, onClose, onStart, reactions])
+  }, [busy, thinking, open, chatter, onClose, onStart, reactions])
 
   const handleRerun = useCallback(() => {
     reactions.reset()
