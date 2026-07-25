@@ -10,7 +10,9 @@ function SparkleIcon() {
   )
 }
 
-// 自動摘要商品說明，串流顯示成一段話。掛載即執行。
+// 自動摘要商品說明，串流顯示成一段話。
+// 這張卡片只在 Gemini Nano 已就緒時才被注入層建立（見 productPageSummary.ts 的 gate），
+// 所以掛載即 run 是安全的——模型已就緒，可用性把關已在注入層完成。
 export function ProductSummaryCard() {
   const { phase, data, error, fromCache, run } = useProductSummary()
 
@@ -25,12 +27,6 @@ export function ProductSummaryCard() {
         <span className="ps-title">AI 商品重點摘要</span>
         {fromCache && <span className="ps-badge">快取</span>}
       </div>
-
-      {phase === 'needs-activation' && (
-        <button className="ps-activate" onClick={() => run({ userInitiated: true })}>
-          點我產生商品重點摘要（首次需下載 AI 模型）
-        </button>
-      )}
 
       {/* 還沒收到任何內容時才顯示 skeleton（檢查中，或生成中但第一塊還沒到） */}
       {(phase === 'checking' || (phase === 'generating' && !data)) && (

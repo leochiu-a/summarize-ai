@@ -10,6 +10,7 @@
 import { createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ProductSummaryCard } from './components/ProductSummaryCard'
+import { geminiNanoAvailabilitySync, onGateChange } from './lib/modelGate'
 import {
   PRODUCT_SUMMARY_HOST_ID,
   findDescSection,
@@ -34,6 +35,8 @@ let cancelWait: (() => void) | null = null
 let cancelHydrationWait: (() => void) | null = null
 // 首次「hydration 安全注入」是否已完成；完成前不讓守衛 observer 搶著注入（會被 mismatch 洗掉）
 let hydrationSettled = false
+// 等 Gemini Nano 下載完成廣播的解除函式（gate 未就緒時訂閱，就緒後重跑 bootstrap）
+let cancelGateWait: (() => void) | null = null
 
 /**====================== 工具 ======================*/
 /**
@@ -149,6 +152,8 @@ function unmountProductSummary(): void {
   cancelWait = null
   cancelHydrationWait?.()
   cancelHydrationWait = null
+  cancelGateWait?.()
+  cancelGateWait = null
   hydrationSettled = false
   sectionObserver?.disconnect()
   sectionObserver = null
@@ -158,10 +163,25 @@ function unmountProductSummary(): void {
 }
 
 /**
- * 對當前頁面啟動摘要卡片（非商品頁自動 no-op）
+ * 對當前頁面啟動摘要卡片（非商品頁自動 no-op）。
+ * gate：Gemini Nano 未就緒時完全不注入（連 hydration 探針都不塞），改訂閱下載完成廣播，
+ * 就緒後才重跑 bootstrap → 使用者同意下載完成即可就地看到卡片，不必重新整理。
  */
 function bootstrapProductSummary(): void {
   if (!isProductPage()) return
+
+  // Gemini Nano 未就緒：不注入，等下載完成廣播（available）再重跑一次
+  if (geminiNanoAvailabilitySync() !== 'available') {
+    cancelGateWait?.()
+    cancelGateWait = onGateChange((a) => {
+      if (a !== 'available') return
+      cancelGateWait?.()
+      cancelGateWait = null
+      bootstrapProductSummary()
+    })
+    return
+  }
+
   cancelWait = waitForDescSection((section) => {
     // 等該區塊 hydrate 完成再注入，避免 hydration mismatch 把卡片洗掉
     cancelHydrationWait = injectAfterHydration(section)

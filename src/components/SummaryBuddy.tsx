@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import snarkdown from 'snarkdown'
 import { useSummarizer } from '../hooks/useSummarizer'
 import { isOpen } from '../lib/buddyPhase'
@@ -16,30 +16,22 @@ const THINKING_LINES = [
 ]
 
 // 整頁摘要模式：自己持有 useSummarizer，把 phase 映射成外殼要的狀態，內容主體用 Markdown 渲染。
-// autoStart=true（每頁自動摘要）時掛載即跑一次；否則靜待使用者點頭像。
+// 靜待使用者點頭像才開始摘要（consent gate 已在外殼把關模型就緒）。
 // onActiveChange：把「泡泡是否展開」回報給 Buddy（換頁時用來決定可否切模式）。
 export function SummaryBuddy({
-  autoStart = false,
   onActiveChange,
 }: {
-  autoStart?: boolean
   onActiveChange?: (active: boolean) => void
 }) {
   const summ = useSummarizer()
-
-  const ran = useRef(false)
-  useEffect(() => {
-    if (!autoStart || ran.current) return
-    ran.current = true
-    void summ.summarize()
-  }, [autoStart, summ])
 
   useEffect(() => {
     onActiveChange?.(isOpen(summ.phase))
   }, [summ.phase, onActiveChange])
 
+  // 點頭像 / 重做都是使用者手勢
   const onStart = useCallback(() => void summ.summarize(), [summ])
-  const onRerun = useCallback(() => void summ.summarize(true), [summ])
+  const onRerun = useCallback(() => void summ.summarize({ force: true }), [summ])
 
   return (
     <BuddyBubble

@@ -8,6 +8,8 @@
 // - 只翻「跟目標語言不同」的評論（同語言不用翻，省時也避免 no-op 噪音）。
 // - Translator 依「來源→目標」語言對建立，同一對重複使用（cache），不重複下載/建立。
 // - 翻譯結果就地插進 KKday 的 DOM（附在原文下方），用 data 屬性標記，能反覆顯示/隱藏。
+//
+// Availability 型別直接用 @types/dom-chromium-ai 的全域 ambient 宣告，不自己再宣告一份。
 
 // 評論卡片內文容器（見實機 DOM：.product-comment-content 內含 title / body / 原生翻譯按鈕）
 const COMMENT_CONTENT_SELECTOR = '.product-comment-content'
@@ -21,9 +23,6 @@ const TRANSLATED_FLAG_ATTR = 'data-summarize-ai-translated-src'
 
 // LanguageDetector 信心門檻：低於此值視為偵測不可靠，保守略過翻譯（不亂翻）
 const MIN_DETECT_CONFIDENCE = 0.5
-
-// 內建 AI 模型的可用狀態（對齊 @types/dom-chromium-ai 的 Availability）
-export type Availability = 'unavailable' | 'downloadable' | 'downloading' | 'available'
 
 // 一則評論翻譯所需的原始素材
 export interface ReviewCard {
@@ -123,10 +122,15 @@ function readCardText(body: HTMLElement): string {
 // LanguageDetector 是單例（一顆就能偵測所有語言），建立一次重複使用
 let detectorPromise: Promise<LanguageDetector> | null = null
 
-// LanguageDetector 是否可用 / 需下載
+// LanguageDetector 是否可用 / 需下載。API 不存在或 availability 拋錯一律視為 unavailable
+// （兜底：呼叫端據此決定要不要注入按鈕，不能讓例外變成 unhandled rejection 或整個功能消失）。
 export async function detectorAvailability(): Promise<Availability> {
   if (typeof LanguageDetector === 'undefined') return 'unavailable'
-  return LanguageDetector.availability()
+  try {
+    return await LanguageDetector.availability()
+  } catch {
+    return 'unavailable'
+  }
 }
 
 // 取得（或建立）LanguageDetector。onProgress 回報模型下載進度（0~1）。

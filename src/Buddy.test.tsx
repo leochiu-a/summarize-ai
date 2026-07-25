@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Buddy } from './Buddy'
+import { resetGateForTest, setGateAvailabilityForTest } from './lib/modelGate'
 import { resetSettingsCache, saveSettings } from './lib/settings'
 import { clearSummaryCache } from './lib/summaryCache'
 import { clearWorthItCache } from './lib/worthItCache'
@@ -74,8 +75,15 @@ function seedProductPage() {
   document.head.appendChild(script)
 }
 
+// 這些測試聚焦「功能 buddy」的行為，不測 consent gate。預設把 gate 同步快取設成 available，
+// 讓 Buddy 一掛載就放行、直接進功能（gate 本身另有專屬測試 modelGate.test / ConsentBuddy）。
+beforeEach(() => {
+  setGateAvailabilityForTest('available')
+})
+
 afterEach(async () => {
   cleanup()
+  resetGateForTest()
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
   document.head.querySelectorAll('script[type="application/ld+json"]').forEach((s) => s.remove())
@@ -156,6 +164,42 @@ describe('Buddy emoji 反應', () => {
   })
 })
 
+describe('Buddy 整頁摘要的 Summarizer availability', () => {
+  // 可控 availability 的 Summarizer stub（模型就緒把關由 consent gate 負責，但 Summarizer 帶
+  // outputLanguage 可能需語言 adapter，故 useSummarizer 仍自己擋 unavailable）
+  function stubSummarizerWith(availability: string, streamFactory: () => AsyncIterable<string>) {
+    const calls = { create: 0 }
+    vi.stubGlobal('Summarizer', {
+      availability: async () => availability,
+      create: async () => {
+        calls.create += 1
+        return { summarizeStreaming: () => streamFactory(), destroy: () => {} }
+      },
+    })
+    return calls
+  }
+
+  it('Summarizer unavailable（裝置不支援）→ 報錯，不 create', async () => {
+    seedArticle()
+    const calls = stubSummarizerWith('unavailable', chunkStream(['內容']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+    await waitFor(() => expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy())
+    expect(calls.create).toBe(0)
+  })
+
+  it('downloadable（語言 adapter 待補）→ 不擋，直接 create 產生（gate 已同意過下載）', async () => {
+    seedArticle()
+    const calls = stubSummarizerWith('downloadable', chunkStream(['台灣自由行攻略']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+    await waitFor(() => expect(screen.getByText(/台灣自由行攻略/)).toBeTruthy())
+    expect(calls.create).toBe(1)
+  })
+})
+
 describe('Buddy 快取', () => {
   it('半小時內重開同一頁用快取，不再呼叫模型', async () => {
     seedArticle()
@@ -220,20 +264,8 @@ describe('Buddy 商品頁「值不值得買」', () => {
   })
 })
 
-describe('Buddy 自動摘要設定', () => {
-  it('開啟「每頁自動摘要」時，載入即自動觸發', async () => {
-    seedArticle()
-    await saveSettings({ autoRun: true })
-    stubSummarizer(chunkStream(['自動觸發的摘要']))
-
-    render(<Buddy />)
-
-    // 沒有點擊頭像，應該自己跑到 done
-    await screen.findByRole('button', { name: '讚' })
-    expect(screen.getByText(/自動觸發的摘要/)).toBeTruthy()
-  })
-
-  it('關閉「每頁自動摘要」（預設）時，載入不會自動觸發', async () => {
+describe('Buddy 進頁不自動觸發', () => {
+  it('載入後靜待使用者點頭像，不會自己跑摘要（無自動摘要功能）', async () => {
     seedArticle()
     const calls = stubSummarizer(chunkStream(['不該出現']))
 
@@ -242,5 +274,68 @@ describe('Buddy 自動摘要設定', () => {
 
     expect(calls.create).toBe(0)
     expect(screen.queryByText(/不該出現/)).toBeNull()
+  })
+})
+
+// 「第一次進來」的完整 consent 流程：從 <Buddy /> 頂層驗證 gate 攔截 → 同意 → 下載 → 交棒。
+// 難點是模型下過就永久 available，這裡用 stub 把「模型未下載」的狀態穩定重現。
+describe('Buddy 第一次進來（模型未下載）的 consent 流程', () => {
+  // LanguageModel 為 downloadable（模擬第一次）；create 帶 monitor 時立即回報下載完成，
+  // 之後 availability 轉為 available（下載完成後 refresh 讀得到）。
+  function stubFirstVisit() {
+    let availability = 'downloadable'
+    const calls = { create: 0, destroy: 0 }
+    vi.stubGlobal('LanguageModel', {
+      availability: async () => availability,
+      create: async (opts?: { monitor?: (m: unknown) => void }) => {
+        calls.create += 1
+        opts?.monitor?.({
+          addEventListener: (t: string, cb: (e: { loaded: number }) => void) => {
+            if (t === 'downloadprogress') cb({ loaded: 1 })
+          },
+        })
+        availability = 'available' // 下載完成 → 之後校正讀到 available
+        return { destroy: () => (calls.destroy += 1) }
+      },
+    })
+    return calls
+  }
+
+  it('進頁模型未下載 → 顯示同意提示，不直接進功能 buddy', async () => {
+    seedArticle()
+    resetGateForTest() // 覆蓋 beforeEach 的 available：回到「還沒校正」的冷啟動
+    stubFirstVisit()
+
+    render(<Buddy />)
+
+    // 冷啟動 async 校正到 downloadable → 顯示同意畫面（不是頁面摘要提示）
+    await waitFor(() => expect(screen.getByText(/要現在下載並啟用嗎/)).toBeTruthy())
+    expect(screen.getByRole('button', { name: '下載並啟用' })).toBeTruthy()
+  })
+
+  it('點「下載並啟用」→ 觸發下載，完成後顯示已就緒', async () => {
+    seedArticle()
+    resetGateForTest()
+    const calls = stubFirstVisit()
+
+    render(<Buddy />)
+    await screen.findByRole('button', { name: '下載並啟用' })
+
+    fireEvent.click(screen.getByRole('button', { name: '下載並啟用' }))
+
+    await waitFor(() => expect(screen.getByText(/下載完成，已就緒/)).toBeTruthy())
+    expect(calls.create).toBe(1) // 有觸發下載
+    expect(calls.destroy).toBe(1) // 下載用的 session 有收掉
+  })
+
+  it('裝置不支援（LanguageModel 不存在）→ 顯示錯誤，不給下載按鈕', async () => {
+    seedArticle()
+    resetGateForTest()
+    vi.stubGlobal('LanguageModel', undefined)
+
+    render(<Buddy />)
+
+    await waitFor(() => expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy())
+    expect(screen.queryByRole('button', { name: '下載並啟用' })).toBeNull()
   })
 })

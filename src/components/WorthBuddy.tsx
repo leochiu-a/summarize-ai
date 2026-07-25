@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useWorthIt } from '../hooks/useWorthIt'
 import { isOpen } from '../lib/buddyPhase'
 import { BuddyBubble } from './BuddyBubble'
@@ -14,31 +14,21 @@ const THINKING_LINES = [
 ]
 
 // 商品頁「值不值得買」模式：自己持有 useWorthIt，內容主體為純文字（保留換行）。
-// autoStart=true（每頁自動）時掛載即跑，且不強制下載模型（userInitiated=false）；
-// 使用者點頭像則是手勢，允許在需要時觸發模型下載。
+// 靜待使用者點頭像才開始判斷（consent gate 已在外殼把關模型就緒）。
 // onActiveChange：把「泡泡是否展開」回報給 Buddy（換頁時用來決定可否切模式）。
 export function WorthBuddy({
-  autoStart = false,
   onActiveChange,
 }: {
-  autoStart?: boolean
   onActiveChange?: (active: boolean) => void
 }) {
   const worth = useWorthIt()
-
-  const ran = useRef(false)
-  useEffect(() => {
-    if (!autoStart || ran.current) return
-    ran.current = true
-    void worth.run({ userInitiated: false })
-  }, [autoStart, worth])
 
   useEffect(() => {
     onActiveChange?.(isOpen(worth.phase))
   }, [worth.phase, onActiveChange])
 
-  const onStart = useCallback(() => void worth.run({ userInitiated: true }), [worth])
-  const onRerun = useCallback(() => void worth.run({ force: true, userInitiated: true }), [worth])
+  const onStart = useCallback(() => void worth.run(), [worth])
+  const onRerun = useCallback(() => void worth.run({ force: true }), [worth])
 
   const data = worth.data ?? ''
 

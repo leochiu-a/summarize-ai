@@ -1,18 +1,10 @@
 import { useCallback, useState } from 'react'
 import { extractDescText, findDescSection, getProductId } from '../lib/productPage'
-import { availability, generateProductSummary } from '../lib/productSummary'
+import { generateProductSummary } from '../lib/productSummary'
 import { getCachedProductSummary, setCachedProductSummary } from '../lib/productSummaryCache'
 import { getSettings } from '../lib/settings'
 
-// needs-activation：模型尚未下載，Chrome 要求「使用者手勢」才能開始下載，
-// 所以不能在掛載時自動跑，改顯示按鈕讓使用者點一下。
-export type ProductPhase =
-  | 'idle'
-  | 'checking'
-  | 'needs-activation'
-  | 'generating'
-  | 'done'
-  | 'error'
+export type ProductPhase = 'idle' | 'checking' | 'generating' | 'done' | 'error'
 
 // 內文太短就別浪費時間啟動模型
 const MIN_CHARS = 100
@@ -22,36 +14,25 @@ export interface ProductSummarizing {
   data: string | null // 摘要文字（串流時為累積到目前的內容）
   error: string
   fromCache: boolean
-  // userInitiated：來自使用者點擊（有手勢），才允許在 downloadable 狀態觸發下載
-  run: (opts?: { force?: boolean; userInitiated?: boolean }) => Promise<void>
+  run: (opts?: { force?: boolean }) => Promise<void>
 }
 
-// 流程：availability → 擷取商品說明 → 查快取 →（未命中）Prompt API 串流輸出 → 寫快取。
+// 流程：擷取商品說明 → 查快取 →（未命中）Prompt API 串流輸出 → 寫快取。
+// 模型可用性（含下載同意）已由注入層 gate 統一把關（gate 未就緒不注入這張卡片），
+// 這裡不再自己判 availability——卡片被掛載＝模型已就緒。
 export function useProductSummary(): ProductSummarizing {
   const [phase, setPhase] = useState<ProductPhase>('idle')
   const [data, setData] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
 
-  const run = useCallback(async ({ force = false, userInitiated = false } = {}) => {
+  const run = useCallback(async ({ force = false } = {}) => {
     setError('')
     setData(null)
     setFromCache(false)
     setPhase('checking')
 
     try {
-      const avail = await availability()
-      if (avail === 'unavailable') {
-        setError('這台裝置無法使用內建 AI 模型（需要 Chrome 138+ 且符合硬體需求）。')
-        setPhase('error')
-        return
-      }
-      // 模型尚未就緒且非使用者主動觸發：下載需要手勢，先請使用者點按鈕
-      if (avail !== 'available' && !userInitiated) {
-        setPhase('needs-activation')
-        return
-      }
-
       const section = findDescSection()
       const text = section ? extractDescText(section) : ''
       if (text.length < MIN_CHARS) {

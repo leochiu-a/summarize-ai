@@ -311,6 +311,23 @@
   display: block;
 }
 
+/* consent「已就緒」：一行、置中、正常字體，emoji 持續播動畫（不靠 hover） */
+.consent-done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #2d2b3d;
+  font-weight: 600;
+}
+.consent-done-emoji .emoji-static {
+  display: none;
+}
+.consent-done-emoji .emoji-anim {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
 .tail {
   width: 0;
   height: 0;

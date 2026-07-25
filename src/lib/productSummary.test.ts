@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { availability, generateProductSummary } from './productSummary'
+import { generateProductSummary } from './productSummary'
 
 interface CreateCall {
   opts: LanguageModelCreateOptions | undefined
@@ -39,18 +39,6 @@ function stubLanguageModel(chunks: string[]) {
 
 afterEach(() => {
   vi.unstubAllGlobals()
-})
-
-describe('availability', () => {
-  it('沒有 LanguageModel 時回 unavailable', async () => {
-    vi.stubGlobal('LanguageModel', undefined)
-    expect(await availability()).toBe('unavailable')
-  })
-
-  it('有 API 時回傳其 availability', async () => {
-    stubLanguageModel(['{}'])
-    expect(await availability()).toBe('available')
-  })
 })
 
 describe('generateProductSummary（串流一段話）', () => {

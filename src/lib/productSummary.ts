@@ -14,11 +14,6 @@ const PRODUCT_TONES: Record<ToneId, string> = {
   literary: '用感性、文藝、帶點畫面感的口吻寫，字句細膩但不空泛。',
 }
 
-// 用 LanguageModel.availability 判斷模型狀態；不支援 API 時視為 unavailable
-export async function availability(): Promise<Availability> {
-  if (typeof LanguageModel === 'undefined') return 'unavailable'
-  return LanguageModel.availability()
-}
 
 // 給模型的指示：濃縮成「一段話」，聚焦「這是什麼 + 適合哪種旅客」，不要條列 / Markdown。
 function buildInstruction(tone: ToneId): string {

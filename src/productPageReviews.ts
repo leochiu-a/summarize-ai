@@ -15,7 +15,7 @@ import {
   onRouteChange,
   waitForReviewSection,
 } from './lib/productPage'
-import { TRANSLATION_NODE_ATTR } from './lib/reviewTranslate'
+import { TRANSLATION_NODE_ATTR, detectorAvailability } from './lib/reviewTranslate'
 import reviewTranslateStyles from './reviewTranslate.css?inline'
 
 // 譯文節點是就地插進 KKday 的 light DOM（非 shadow），需要一份 global style 才吃得到樣式。
@@ -108,14 +108,26 @@ function unmountReviewTranslate(): void {
 
 function bootstrapReviewTranslate(): void {
   if (!isProductPage()) return
-  ensureGlobalTranslationStyle()
-  cancelWait = waitForReviewSection((section) => {
-    injectButton(section)
-    // 守住之後被框架 re-render 洗掉的情況（debounce 合併大量 SPA mutation）
-    sectionObserver = new MutationObserver(debounce(ensureButton, 300))
-    sectionObserver.observe(section.parentElement ?? document.body, {
-      childList: true,
-      subtree: true,
+
+  // B 組 gate（獨立於 Gemini Nano）：LanguageDetector 連「可下載」都不是（unavailable，
+  // 即裝置不支援）就不注入按鈕。downloadable/available 都放行——按鈕第一次點擊即為下載手勢
+  // （既有設計，翻譯語言包按語言對逐則下載，見 useReviewTranslate）。
+  // detectorAvailability 是 async，用旗標防「檢查途中被 SPA 換頁取消」時仍注入。
+  let cancelled = false
+  cancelWait = () => {
+    cancelled = true
+  }
+  void detectorAvailability().then((avail) => {
+    if (cancelled || avail === 'unavailable') return
+    ensureGlobalTranslationStyle()
+    cancelWait = waitForReviewSection((section) => {
+      injectButton(section)
+      // 守住之後被框架 re-render 洗掉的情況（debounce 合併大量 SPA mutation）
+      sectionObserver = new MutationObserver(debounce(ensureButton, 300))
+      sectionObserver.observe(section.parentElement ?? document.body, {
+        childList: true,
+        subtree: true,
+      })
     })
   })
 }
