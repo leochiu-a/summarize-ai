@@ -276,3 +276,66 @@ describe('Buddy 進頁不自動觸發', () => {
     expect(screen.queryByText(/不該出現/)).toBeNull()
   })
 })
+
+// 「第一次進來」的完整 consent 流程：從 <Buddy /> 頂層驗證 gate 攔截 → 同意 → 下載 → 交棒。
+// 難點是模型下過就永久 available，這裡用 stub 把「模型未下載」的狀態穩定重現。
+describe('Buddy 第一次進來（模型未下載）的 consent 流程', () => {
+  // LanguageModel 為 downloadable（模擬第一次）；create 帶 monitor 時立即回報下載完成，
+  // 之後 availability 轉為 available（下載完成後 refresh 讀得到）。
+  function stubFirstVisit() {
+    let availability = 'downloadable'
+    const calls = { create: 0, destroy: 0 }
+    vi.stubGlobal('LanguageModel', {
+      availability: async () => availability,
+      create: async (opts?: { monitor?: (m: unknown) => void }) => {
+        calls.create += 1
+        opts?.monitor?.({
+          addEventListener: (t: string, cb: (e: { loaded: number }) => void) => {
+            if (t === 'downloadprogress') cb({ loaded: 1 })
+          },
+        })
+        availability = 'available' // 下載完成 → 之後校正讀到 available
+        return { destroy: () => (calls.destroy += 1) }
+      },
+    })
+    return calls
+  }
+
+  it('進頁模型未下載 → 顯示同意提示，不直接進功能 buddy', async () => {
+    seedArticle()
+    resetGateForTest() // 覆蓋 beforeEach 的 available：回到「還沒校正」的冷啟動
+    stubFirstVisit()
+
+    render(<Buddy />)
+
+    // 冷啟動 async 校正到 downloadable → 顯示同意畫面（不是頁面摘要提示）
+    await waitFor(() => expect(screen.getByText(/要現在下載並啟用嗎/)).toBeTruthy())
+    expect(screen.getByRole('button', { name: '下載並啟用' })).toBeTruthy()
+  })
+
+  it('點「下載並啟用」→ 觸發下載，完成後顯示已就緒', async () => {
+    seedArticle()
+    resetGateForTest()
+    const calls = stubFirstVisit()
+
+    render(<Buddy />)
+    await screen.findByRole('button', { name: '下載並啟用' })
+
+    fireEvent.click(screen.getByRole('button', { name: '下載並啟用' }))
+
+    await waitFor(() => expect(screen.getByText(/下載完成，已就緒/)).toBeTruthy())
+    expect(calls.create).toBe(1) // 有觸發下載
+    expect(calls.destroy).toBe(1) // 下載用的 session 有收掉
+  })
+
+  it('裝置不支援（LanguageModel 不存在）→ 顯示錯誤，不給下載按鈕', async () => {
+    seedArticle()
+    resetGateForTest()
+    vi.stubGlobal('LanguageModel', undefined)
+
+    render(<Buddy />)
+
+    await waitFor(() => expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy())
+    expect(screen.queryByRole('button', { name: '下載並啟用' })).toBeNull()
+  })
+})
