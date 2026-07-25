@@ -56,25 +56,32 @@ describe('ProductSummaryCard', () => {
     await waitFor(() => expect(screen.getByText(MODEL_OUTPUT)).toBeTruthy())
   })
 
-  it('裝置無法使用模型時顯示錯誤', async () => {
+  it('生成過程出錯（create throw）時顯示錯誤', async () => {
+    // 可用性把關已移到注入層 gate（unavailable 時卡片根本不會被注入），卡片自己不再判 availability。
+    // 這裡驗證真實的兜底路徑：create 失敗 → catch → 顯示錯誤。
     seedDescSection()
-    stubLanguageModel('unavailable')
+    vi.stubGlobal('LanguageModel', {
+      availability: async () => 'available',
+      create: async () => {
+        throw new Error('模型初始化失敗')
+      },
+    })
     render(<ProductSummaryCard />)
 
-    await waitFor(() => expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/摘要失敗/)).toBeTruthy())
   })
 
-  it('模型未下載時不自動跑，顯示按鈕；點擊後才產生', async () => {
+  // 「模型未下載就先問同意」的把關已移到注入層（productPageSummary 的 gate）：
+  // downloadable 時卡片根本不會被注入。所以卡片本身的契約是「被 render＝gate 已通過」，
+  // 掛載即以 userInitiated 直接產生（不再自己顯示 needs-activation 按鈕）。
+  it('卡片被 render 即代表 gate 已放行，掛載即直接產生（不需再點按鈕）', async () => {
     seedDescSection()
-    const calls = stubLanguageModel('downloadable')
+    const calls = stubLanguageModel('available')
     render(<ProductSummaryCard />)
 
-    // 掛載後應停在等待啟用狀態、還沒呼叫模型
-    const activate = await screen.findByText(/點我產生商品重點摘要/)
-    expect(calls.create).toBe(0)
-
-    fireEvent.click(activate)
     await waitFor(() => expect(screen.getByText(MODEL_OUTPUT)).toBeTruthy())
     expect(calls.create).toBe(1)
+    // 不再出現「點我產生」按鈕（那道把關已移到注入層）
+    expect(screen.queryByText(/點我產生商品重點摘要/)).toBeNull()
   })
 })

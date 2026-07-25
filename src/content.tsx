@@ -7,6 +7,7 @@ import overlayScrollbarsStyles from 'overlayscrollbars/overlayscrollbars.css?inl
 import { Buddy } from './Buddy'
 import { AVATAR_H, AVATAR_W, FRAMES } from './constants'
 import styles from './content.css?inline'
+import { refreshGeminiNano } from './lib/modelGate'
 import { startProductPageReviews } from './productPageReviews'
 import { startProductPageSummary } from './productPageSummary'
 
@@ -29,8 +30,13 @@ shadow.appendChild(mount)
 document.documentElement.appendChild(host)
 createRoot(mount).render(<Buddy />)
 
-// ── 商品頁專屬：AI 商品重點摘要卡片 ──────────────────────────────
-startProductPageSummary()
+// ── Gemini Nano consent gate：先校正一次可用狀態，填好同步快取 ──────
+// 注入層（商品摘要卡片）會用同步快取決定「建立 UI 之前」要不要顯示（零閃現）；
+// Buddy 內部另有自己的 gate 流程。校正完再啟動商品頁注入功能，確保它們讀得到快取。
+void refreshGeminiNano().finally(() => {
+  // ── 商品頁專屬：AI 商品重點摘要卡片（gate 未就緒不注入，下載完成靠廣播就地復活）──
+  startProductPageSummary()
 
-// ── 商品頁專屬：一鍵翻譯所有評論 ────────────────────────────────
-startProductPageReviews()
+  // ── 商品頁專屬：一鍵翻譯所有評論（B 組獨立判斷）────────────────
+  startProductPageReviews()
+})
