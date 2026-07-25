@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import type { BuddyPhase } from '../lib/buddyPhase'
 import { getProductId } from '../lib/productPage'
 import { readProductFacts } from '../lib/productFacts'
-import { availability, generateWorthIt } from '../lib/worthIt'
+import { generateWorthIt } from '../lib/worthIt'
 import { getCachedWorthIt, setCachedWorthIt } from '../lib/worthItCache'
 import { getSettings } from '../lib/settings'
 
@@ -11,37 +11,25 @@ export interface WorthIting {
   data: string | null // 判斷文字（串流時為累積到目前的內容）
   error: string
   fromCache: boolean
-  run: (opts?: { force?: boolean; userInitiated?: boolean }) => Promise<void>
+  run: (opts?: { force?: boolean }) => Promise<void>
   reset: () => void
 }
 
-// 流程：availability → 讀商品事實（JSON-LD + DOM）→ 查快取 →（未命中）Prompt API 串流 → 寫快取。
+// 流程：讀商品事實（JSON-LD + DOM）→ 查快取 →（未命中）Prompt API 串流 → 寫快取。
+// 模型可用性（含下載同意）已由 consent gate 在外殼統一把關，這裡不再自己判 availability。
 export function useWorthIt(): WorthIting {
   const [phase, setPhase] = useState<BuddyPhase>('idle')
   const [data, setData] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
 
-  const run = useCallback(async ({ force = false, userInitiated = false } = {}) => {
+  const run = useCallback(async ({ force = false } = {}) => {
     setError('')
     setData(null)
     setFromCache(false)
-    setPhase('thinking') // 準備中：查 availability、讀商品事實，都還沒吐字
+    setPhase('thinking') // 準備中：讀商品事實，都還沒吐字
 
     try {
-      const avail = await availability()
-      if (avail === 'unavailable') {
-        setError('這台裝置無法使用內建 AI 模型（需要 Chrome 138+ 且符合硬體需求）。')
-        setPhase('error')
-        return
-      }
-      // 模型尚未就緒且非使用者主動觸發：下載需要手勢，先請使用者點一下
-      // （buddy 點擊本身即手勢，userInitiated 通常為 true；此狀態主要保險用）
-      if (avail !== 'available' && !userInitiated) {
-        setPhase('needs-activation')
-        return
-      }
-
       const facts = readProductFacts()
       if (!facts) {
         setError('這頁抓不到商品資料，沒辦法幫你判斷。')

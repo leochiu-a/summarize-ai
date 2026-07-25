@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Buddy } from './Buddy'
+import { resetGateForTest, setGateAvailabilityForTest } from './lib/modelGate'
 import { resetSettingsCache, saveSettings } from './lib/settings'
 import { clearSummaryCache } from './lib/summaryCache'
 import { clearWorthItCache } from './lib/worthItCache'
@@ -74,8 +75,15 @@ function seedProductPage() {
   document.head.appendChild(script)
 }
 
+// 這些測試聚焦「功能 buddy」的行為，不測 consent gate。預設把 gate 同步快取設成 available，
+// 讓 Buddy 一掛載就放行、直接進功能（gate 本身另有專屬測試 modelGate.test / ConsentBuddy）。
+beforeEach(() => {
+  setGateAvailabilityForTest('available')
+})
+
 afterEach(async () => {
   cleanup()
+  resetGateForTest()
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
   document.head.querySelectorAll('script[type="application/ld+json"]').forEach((s) => s.remove())
@@ -156,6 +164,42 @@ describe('Buddy emoji 反應', () => {
   })
 })
 
+describe('Buddy 整頁摘要的 Summarizer availability', () => {
+  // 可控 availability 的 Summarizer stub（模型就緒把關由 consent gate 負責，但 Summarizer 帶
+  // outputLanguage 可能需語言 adapter，故 useSummarizer 仍自己擋 unavailable）
+  function stubSummarizerWith(availability: string, streamFactory: () => AsyncIterable<string>) {
+    const calls = { create: 0 }
+    vi.stubGlobal('Summarizer', {
+      availability: async () => availability,
+      create: async () => {
+        calls.create += 1
+        return { summarizeStreaming: () => streamFactory(), destroy: () => {} }
+      },
+    })
+    return calls
+  }
+
+  it('Summarizer unavailable（裝置不支援）→ 報錯，不 create', async () => {
+    seedArticle()
+    const calls = stubSummarizerWith('unavailable', chunkStream(['內容']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+    await waitFor(() => expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy())
+    expect(calls.create).toBe(0)
+  })
+
+  it('downloadable（語言 adapter 待補）→ 不擋，直接 create 產生（gate 已同意過下載）', async () => {
+    seedArticle()
+    const calls = stubSummarizerWith('downloadable', chunkStream(['台灣自由行攻略']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+    await waitFor(() => expect(screen.getByText(/台灣自由行攻略/)).toBeTruthy())
+    expect(calls.create).toBe(1)
+  })
+})
+
 describe('Buddy 快取', () => {
   it('半小時內重開同一頁用快取，不再呼叫模型', async () => {
     seedArticle()
@@ -220,20 +264,8 @@ describe('Buddy 商品頁「值不值得買」', () => {
   })
 })
 
-describe('Buddy 自動摘要設定', () => {
-  it('開啟「每頁自動摘要」時，載入即自動觸發', async () => {
-    seedArticle()
-    await saveSettings({ autoRun: true })
-    stubSummarizer(chunkStream(['自動觸發的摘要']))
-
-    render(<Buddy />)
-
-    // 沒有點擊頭像，應該自己跑到 done
-    await screen.findByRole('button', { name: '讚' })
-    expect(screen.getByText(/自動觸發的摘要/)).toBeTruthy()
-  })
-
-  it('關閉「每頁自動摘要」（預設）時，載入不會自動觸發', async () => {
+describe('Buddy 進頁不自動觸發', () => {
+  it('載入後靜待使用者點頭像，不會自己跑摘要（無自動摘要功能）', async () => {
     seedArticle()
     const calls = stubSummarizer(chunkStream(['不該出現']))
 

@@ -7,7 +7,6 @@ export type SummaryTypeId = 'key-points' | 'tldr' | 'teaser' | 'headline'
 export interface Settings {
   tone: ToneId
   summaryType: SummaryTypeId
-  autoRun: boolean
 }
 
 // 語氣：emoji code（對應 Google Noto assets/emoji/<code>.svg|.webp）+ 標籤 + 餵給模型的口吻指示
@@ -31,7 +30,6 @@ export const SUMMARY_TYPES: { id: SummaryTypeId; label: string; hint: string }[]
 export const DEFAULT_SETTINGS: Settings = {
   tone: 'humorous',
   summaryType: 'key-points',
-  autoRun: false,
 }
 
 const STORAGE_KEY = 'settings'

@@ -15,11 +15,6 @@ const WORTH_TONES: Record<ToneId, string> = {
   literary: '用感性、帶點畫面感的口吻，字句細膩但不空泛。',
 }
 
-// 用 LanguageModel.availability 判斷模型狀態；不支援 API 時視為 unavailable
-export async function availability(): Promise<Availability> {
-  if (typeof LanguageModel === 'undefined') return 'unavailable'
-  return LanguageModel.availability()
-}
 
 // 把結構化事實轉成給模型看的條列文字。只列有值的欄位，避免模型看到 undefined 亂掰。
 export function factsToText(facts: ProductFacts): string {

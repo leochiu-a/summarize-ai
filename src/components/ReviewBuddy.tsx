@@ -42,7 +42,6 @@ function promptFor(len: number): { text: string; canRewrite: boolean } {
 export function ReviewBuddy({
   onActiveChange,
 }: {
-  autoStart?: boolean
   onActiveChange?: (active: boolean) => void
 }) {
   const review = useReviewRewrite()
@@ -70,7 +69,7 @@ export function ReviewBuddy({
   }, [phase, onActiveChange])
 
   // 潤飾使用者目前寫的評論（「幫我想想」/「重新潤飾」按鈕用；點擊是使用者手勢，允許觸發模型下載）
-  const doRewrite = useCallback(() => void review.run({ userInitiated: true }), [review])
+  const doRewrite = useCallback(() => void review.run(), [review])
 
   // 點頭像收合泡泡：標記 dismissed（壓過 openWhenIdle，真的收起），並重置狀態
   const onClose = useCallback(() => {

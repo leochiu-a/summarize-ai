@@ -28,11 +28,6 @@ function sharedContext(tone: ToneId): string {
   )
 }
 
-// 用 Rewriter.availability 判斷模型狀態；不支援 API 時視為 unavailable
-export async function availability(): Promise<Availability> {
-  if (typeof Rewriter === 'undefined') return 'unavailable'
-  return Rewriter.availability()
-}
 
 // 串流潤飾：把累積到目前的文字透過 onChunk 往 UI 送，最後回傳完整內容。
 // draft 是使用者輸入框裡現有的評論文字。

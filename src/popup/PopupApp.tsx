@@ -70,28 +70,6 @@ export function PopupApp() {
         <p className="hint">{SUMMARY_TYPES.find((s) => s.id === settings.summaryType)?.hint}</p>
       </section>
 
-      <section className="section" style={{ '--i': 2 } as React.CSSProperties}>
-        <div className="section-label">
-          <span className="num">03</span>
-          <span className="name">自動摘要</span>
-        </div>
-        <button
-          type="button"
-          className={settings.autoRun ? 'toggle-row on' : 'toggle-row'}
-          onClick={() => void update({ autoRun: !settings.autoRun })}
-          aria-pressed={settings.autoRun}
-        >
-          <span className="toggle-copy">
-            <span className="toggle-title">每個頁面自動摘要</span>
-            <span className="toggle-hint">一打開網頁小夥伴就先幫你讀</span>
-          </span>
-          <span className="switch">
-            <span className="switch-state">{settings.autoRun ? 'ON' : 'OFF'}</span>
-            <span className="knob" />
-          </span>
-        </button>
-      </section>
-
       <footer className="foot">
         <span className="blink">▚</span> 設定會立即套用到下一次摘要
       </footer>
