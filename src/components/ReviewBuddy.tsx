@@ -68,8 +68,10 @@ export function ReviewBuddy({
     onActiveChange?.(isOpen(phase))
   }, [phase, onActiveChange])
 
-  // 潤飾使用者目前寫的評論（「幫我想想」/「重新潤飾」按鈕用；點擊是使用者手勢，允許觸發模型下載）
+  // 潤飾使用者目前寫的評論（「幫我想想」按鈕用；點擊是使用者手勢，允許觸發模型下載）
   const doRewrite = useCallback(() => void review.run(), [review])
+  // 「重新潤飾」：使用者不要這一版，略過快取重跑（BuddyBubble 的 onRerun 契約也是「強制重跑」）
+  const doRerun = useCallback(() => void review.rerun(), [review])
 
   // 點頭像收合泡泡：標記 dismissed（壓過 openWhenIdle，真的收起），並重置狀態
   const onClose = useCallback(() => {
@@ -100,7 +102,7 @@ export function ReviewBuddy({
         <button type="button" className="buddy-btn primary" onClick={review.apply}>
           套用到評論
         </button>
-        <button type="button" className="buddy-btn ghost" onClick={doRewrite}>
+        <button type="button" className="buddy-btn ghost" onClick={doRerun}>
           重新潤飾
         </button>
       </>
@@ -118,7 +120,7 @@ export function ReviewBuddy({
       }}
       onStart={onReopen}
       onClose={onClose}
-      onRerun={doRewrite}
+      onRerun={doRerun}
       openWhenIdle={!dismissed} // 一進評論頁就主動顯示提示；使用者收合後不再彈回
       actions={actions}
       showReactions={false} // 評論潤飾不需要 emoji 反應列

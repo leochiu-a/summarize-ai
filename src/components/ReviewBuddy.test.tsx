@@ -132,8 +132,8 @@ describe('ReviewBuddy 收合', () => {
   })
 })
 
-describe('ReviewBuddy 快取：原文沒變不重跑', () => {
-  it('原文相同再次潤飾 → 直接用上次結果，不重呼叫模型', async () => {
+describe('ReviewBuddy 快取', () => {
+  it('原文沒變、重新展開再按「幫我想想」→ 用上次結果，不重呼叫模型', async () => {
     seedReviewPage()
     const calls = stubRewriter(chunkStream(['第一次潤飾結果']))
     render(<ReviewBuddy />)
@@ -145,9 +145,35 @@ describe('ReviewBuddy 快取：原文沒變不重跑', () => {
     await screen.findByText(/第一次潤飾結果/)
     expect(calls.create).toBe(1)
 
-    // 原文沒變，點「重新潤飾」→ 用快取，不重跑
-    fireEvent.click(screen.getByRole('button', { name: '重新潤飾' }))
-    await waitFor(() => screen.getByText(/第一次潤飾結果/))
+    // 收合 → 重開（回到 idle 提示）→ 原文沒變再按「幫我想想」：吃快取
+    fireEvent.click(avatar())
+    await waitFor(() => expect(screen.queryByText(/第一次潤飾結果/)).toBeNull())
+    fireEvent.click(avatar())
+    await waitFor(() => screen.getByRole('button', { name: '幫我想想怎麼寫' }))
+    fireEvent.click(screen.getByRole('button', { name: '幫我想想怎麼寫' }))
+    await screen.findByText(/第一次潤飾結果/)
     expect(calls.create).toBe(1) // 沒有增加
+  })
+
+  it('「重新潤飾」略過快取，真的重跑模型並換一版結果', async () => {
+    seedReviewPage()
+    // 第一次吐 A、第二次吐 B：驗證使用者按了真的看到新的一版
+    let nth = 0
+    const calls = stubRewriter(async function* () {
+      yield nth++ === 0 ? '第一版結果' : '第二版結果'
+    })
+    render(<ReviewBuddy />)
+    const el = document.querySelector('textarea')! as HTMLTextAreaElement
+    typeInto(el, '同一段原文'.repeat(12))
+
+    await waitFor(() => screen.getByRole('button', { name: '幫我想想怎麼寫' }))
+    fireEvent.click(screen.getByRole('button', { name: '幫我想想怎麼寫' }))
+    await screen.findByText(/第一版結果/)
+    expect(calls.create).toBe(1)
+
+    // 原文沒變也要重跑——使用者按這顆就是不要上一版
+    fireEvent.click(screen.getByRole('button', { name: '重新潤飾' }))
+    await screen.findByText(/第二版結果/)
+    expect(calls.create).toBe(2)
   })
 })
