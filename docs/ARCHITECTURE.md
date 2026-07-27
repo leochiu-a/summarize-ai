@@ -4,7 +4,7 @@
 
 擴充套件只在 `kkday.com`（含子網域）運作。所有推論都用 Chrome 內建 AI 在本機執行，內容不上傳。內建 AI 分兩組：
 
-- **A 組**（共用 Gemini Nano）：Summarizer / Prompt（`LanguageModel`）/ Rewriter — 頁面摘要、商品摘要卡片、評論潤飾、值不值得分析。
+- **A 組**（共用 Gemini Nano）：Summarizer / Prompt（`LanguageModel`）/ Rewriter — 頁面摘要、商品摘要卡片、評論潤飾、值不值得分析。其中 Rewriter 尚未進穩定版，評論潤飾會退回 Prompt API（見下方〈評論潤飾〉）。
 - **B 組**（獨立模型）：Translator / LanguageDetector — 翻譯所有評論。
 
 兩組各自有自己的「可用性 / 下載」gate，見下方〈Model gate〉。
@@ -55,13 +55,25 @@
 
 ---
 
-## 評論潤飾（Rewriter API）
+## 評論潤飾（Rewriter，退回 Prompt API）
 
 只在評論撰寫頁（URL 形如 `/order/comment/<id>`）觸發，程式在 [`src/hooks/useReviewRewrite.ts`](../src/hooks/useReviewRewrite.ts) 與 [`src/components/ReviewBuddy.tsx`](../src/components/ReviewBuddy.tsx)。
 
 - buddy 監看評論 textarea，內容寫滿 45 字才出現「幫我想想」引導提示。
-- 用 Rewriter API（[`src/lib/reviewRewrite.ts`](../src/lib/reviewRewrite.ts)）串流潤飾使用者已寫好的內容——只順句、不杜撰。
+- [`src/lib/reviewRewrite.ts`](../src/lib/reviewRewrite.ts) 串流潤飾使用者已寫好的內容——只順句、不杜撰。
 - 潤飾結果需使用者按「套用到評論」才寫回 textarea，**不代送**。
+- 以「原文 + 語氣」為快取：原文沒變又按「幫我想想」就沿用上次結果，不重跑模型。但「重新潤飾」會**略過快取**，並在 prompt / Rewriter 的 per-call `context` 追加「換不同句構與用詞」的要求——本機模型重跑常吐出幾乎一樣的句子，不加這個要求使用者會以為按鈕沒反應。
+
+### 為什麼有 fallback
+
+Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**：origin trial 只跑到 Chrome 148 就結束，之後只剩 `chrome://flags/#rewriter-api`（Chrome 151 實測 `typeof Rewriter === 'undefined'`）。一般使用者裝了 extension 也用不到，所以 `generateRewrite()` 分兩條路：
+
+1. **首選 Rewriter**：`typeof Rewriter !== 'undefined'` 且 `availability() !== 'unavailable'`，`create()` 也成功才走。
+2. **退回 Prompt API**（`LanguageModel`，extension 從 Chrome 138 起穩定）：把同一份 `sharedContext()` 當指示送進 `promptStreaming`，另外多要求「只輸出潤飾後的本文」——Rewriter 靠 API 語意就知道輸入是待潤飾的原文，通用模型得講明白。
+
+兩條路底層是同一顆 Gemini Nano，所以 gate 不必為 Rewriter 另開一組判斷：modelGate 放行（base model 就緒）就至少有一條路能跑。
+
+一個刻意的取捨：**只在 availability / `create()` 階段才退回**。一旦開始串流，UI 上已經有文字，這時再換 Prompt API 重跑會讓畫面整段跳掉，所以直接讓錯誤浮到 UI。
 
 ---
 
