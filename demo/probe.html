@@ -42,6 +42,15 @@
 </p>
 <pre id="out" hidden></pre>
 
+<p>
+  <button id="runSchema">測試結構化輸出（responseConstraint）</button>
+  <span class="note">
+    「值不值得買」靠 <code>responseConstraint</code> 把結論鎖成 enum。這顆按鈕用真的 schema
+    跑一次，確認這台機器有沒有照做——若 enum 沒被遵守，程式會退回把整段當理由用。
+  </span>
+</p>
+<pre id="outSchema" hidden></pre>
+
 <script>
 const ua = navigator.userAgent.match(/Chrome\/(\d+)/)
 document.getElementById('ua').textContent =
@@ -131,6 +140,75 @@ btn.addEventListener('click', async () => {
     out.textContent = `失敗：${e.name}: ${e.message}`
   } finally {
     btn.disabled = false
+  }
+})
+
+// 結構化輸出探測：用「值不值得買」實際使用的 schema（與 src/lib/worthIt.ts 的
+// WORTH_SCHEMA 一致，改那邊記得同步這裡）跑一次，回報三件事：
+//   1. create/prompt 有沒有因為 responseConstraint 直接報錯
+//   2. 輸出是不是合法 JSON
+//   3. verdict 有沒有落在 enum 內
+// 三者都過才代表這台機器真的支援；否則程式會走 parseWorthIt 的降級路徑。
+const VERDICTS = ['值得下手', '可以考慮', '再想想']
+const WORTH_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: VERDICTS },
+    reason: { type: 'string' },
+  },
+  required: ['verdict', 'reason'],
+  additionalProperties: false,
+}
+
+const btnSchema = document.getElementById('runSchema')
+const outSchema = document.getElementById('outSchema')
+
+btnSchema.addEventListener('click', async () => {
+  btnSchema.disabled = true
+  outSchema.hidden = false
+  outSchema.textContent = '準備中…'
+
+  const facts =
+    '商品名稱：釜山通行證 VISIT BUSAN PASS\n分類：景點通票\n' +
+    '評分：4.83 / 5，共 7228 則評論\n價格：TWD 936～980 起\n可用折扣券：TWD 200、TWD 600\n' +
+    '取消政策：出發前一天可免費取消'
+  const instruction =
+    '你是幫使用者判斷「這個 KKday 商品值不值得下手」的購物小幫手。' +
+    '請用繁體中文（台灣），根據下面提供的商品事實，以結論先行的方式回答，輸出兩個欄位：\n' +
+    `1) verdict：從「${VERDICTS.join('」「')}」三者中選一個，不要自創其他措辭；\n` +
+    '2) reason：用 1～3 句說明理由。純文字，不要 Markdown、不要條列。\n' +
+    `只根據下列事實作答。\n\n商品事實：\n${facts}`
+
+  const lines = []
+  try {
+    if (typeof LanguageModel === 'undefined') throw new Error('這個瀏覽器沒有 LanguageModel')
+    const session = await LanguageModel.create()
+    lines.push(`contextWindow: ${session.contextWindow}`)
+    const raw = await session.prompt(instruction, { responseConstraint: WORTH_SCHEMA })
+    session.destroy()
+
+    lines.push(`原始輸出：\n${raw}\n`)
+    let parsed = null
+    try {
+      parsed = JSON.parse(raw)
+      lines.push('✅ 是合法 JSON')
+    } catch {
+      lines.push('❌ 不是合法 JSON —— 這台機器沒有套用 responseConstraint（程式會走降級路徑）')
+    }
+    if (parsed) {
+      const ok = VERDICTS.includes(parsed.verdict)
+      lines.push(`${ok ? '✅' : '❌'} verdict = ${JSON.stringify(parsed.verdict)}${ok ? '（在 enum 內）' : '（不在 enum 內！）'}`)
+      lines.push(`reason = ${JSON.stringify(parsed.reason)}`)
+      lines.push(`\n組合後會顯示成：${ok ? parsed.verdict + '，' + String(parsed.reason ?? '').replace(/^[，,。\s]+/, '') : String(parsed.reason ?? '')}`)
+    }
+  } catch (e) {
+    lines.push(`失敗：${e.name}: ${e.message}`)
+    if (/constraint|schema|responseConstraint/i.test(e.message)) {
+      lines.push('→ 錯誤訊息提到 constraint，代表這台機器不接受 responseConstraint。')
+    }
+  } finally {
+    outSchema.textContent = lines.join('\n')
+    btnSchema.disabled = false
   }
 })
 </script>

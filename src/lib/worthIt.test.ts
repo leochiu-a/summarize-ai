@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProductFacts } from './productFacts'
-import { buildInstruction, factsToText } from './worthIt'
+import { WORTH_SCHEMA, buildInstruction, factsToText, parseWorthIt } from './worthIt'
 
 const FACTS: ProductFacts = {
   name: '釜山通行證 VISIT BUSAN PASS',
@@ -60,5 +60,66 @@ describe('buildInstruction', () => {
   it('不同語氣會反映在指示中', () => {
     expect(buildInstruction('humorous', FACTS)).toContain('幽默')
     expect(buildInstruction('cynical', FACTS)).toContain('厭世')
+  })
+
+  // schema 是主要約束，但指示裡仍保留格式說明——萬一某些裝置忽略 responseConstraint，
+  // 輸出至少還是可讀的「結論 + 理由」，不會比改版前更糟。
+  it('仍然把三個結論選項寫進指示（降級時的退路）', () => {
+    const ins = buildInstruction('serious', FACTS)
+    for (const v of WORTH_SCHEMA.properties.verdict.enum) expect(ins).toContain(v)
+  })
+})
+
+describe('WORTH_SCHEMA', () => {
+  it('verdict 是封閉的 enum，且不用 maxLength 限制 reason（官方反模式）', () => {
+    expect(WORTH_SCHEMA.properties.verdict.enum).toEqual(['值得下手', '可以考慮', '再想想'])
+    expect(WORTH_SCHEMA.required).toEqual(['verdict', 'reason'])
+    expect(WORTH_SCHEMA.additionalProperties).toBe(false)
+    expect(JSON.stringify(WORTH_SCHEMA)).not.toContain('maxLength')
+  })
+})
+
+describe('parseWorthIt', () => {
+  it('完整 JSON → 取出 verdict 與 reason，組成人話', () => {
+    const r = parseWorthIt('{"verdict":"值得下手","reason":"評分 4.83 很高，又有折扣券可用。"}')
+    expect(r.verdict).toBe('值得下手')
+    expect(r.reason).toBe('評分 4.83 很高，又有折扣券可用。')
+    expect(r.text).toBe('值得下手，評分 4.83 很高，又有折扣券可用。')
+  })
+
+  it('串流途中的片段 JSON → 抽出已到齊的部分，不外洩破 JSON', () => {
+    // 連欄位名都還沒收完
+    expect(parseWorthIt('{"verd').text).toBe('')
+    // verdict 收到一半：因為要比對 enum，半截的值不算數 → 顯示空的。
+    // 這是刻意的：否則泡泡會閃「值」→「值得」→「值得下手」。
+    expect(parseWorthIt('{"verdict":"值得').text).toBe('')
+    // verdict 收完就先顯示結論，reason 再逐字長出來
+    expect(parseWorthIt('{"verdict":"值得下手"').text).toBe('值得下手')
+    const mid = parseWorthIt('{"verdict":"可以考慮","reason":"評分不錯，但價')
+    expect(mid.verdict).toBe('可以考慮')
+    expect(mid.text).toBe('可以考慮，評分不錯，但價')
+  })
+
+  it('裝置忽略 responseConstraint、直接吐散文 → 整段當理由（降級仍可用）', () => {
+    const prose = '值得下手，這個通行證評分很高，記得用折扣券。'
+    const r = parseWorthIt(prose)
+    expect(r.verdict).toBeNull()
+    expect(r.text).toBe(prose)
+  })
+
+  it('verdict 不在 enum 內視為沒有結論，但理由仍保留', () => {
+    const r = parseWorthIt('{"verdict":"超級推薦","reason":"評分很高。"}')
+    expect(r.verdict).toBeNull()
+    expect(r.text).toBe('評分很高。')
+  })
+
+  it('處理轉義字元與 reason 開頭的多餘標點', () => {
+    const r = parseWorthIt('{"verdict":"再想想","reason":"，價格偏高\\n建議再比較"}')
+    expect(r.text).toBe('再想想，價格偏高\n建議再比較')
+  })
+
+  it('空輸出 → 全空，讓呼叫端能判斷「沒給出判斷」', () => {
+    expect(parseWorthIt('   ')).toEqual({ verdict: null, reason: '', text: '' })
+    expect(parseWorthIt('{"verdict":null,"reason":""}').text).toBe('')
   })
 })

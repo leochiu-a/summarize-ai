@@ -53,6 +53,18 @@
 - 事實由 [`src/lib/productFacts.ts`](../src/lib/productFacts.ts) 從 JSON-LD + DOM 抽出（評分、價格、折扣券等），餵給 `LanguageModel` 串流生成「結論先行 + 短理由」的購買建議。
 - 使用者點頭像才判斷（需使用者手勢）；結果快取 24h（[`src/lib/worthItCache.ts`](../src/lib/worthItCache.ts)）。
 
+### 結構化輸出（responseConstraint）
+
+結論（值得下手 / 可以考慮 / 再想想）用 `responseConstraint` 傳 JSON Schema 鎖成 enum，而不是靠 prompt 指示「第一句請用『值得下手』開頭」——本機小模型很容易破格（多一句開場白、改用別的措辭、吐 Markdown），enum 是在解碼層就出不了格。
+
+三個要注意的地方：
+
+- **串流不能直接顯示。** 串流途中的 JSON 必然是破的，直接餵給 UI 會看到 `{"verd`。所以 [`parseWorthIt()`](../src/lib/worthIt.ts) 每收到一塊就容錯抽取一次，只把已到齊的欄位組成人話往下送。verdict 收到一半時刻意顯示空的——否則泡泡會閃「值」→「值得」→「值得下手」。
+- **降級路徑是同一條。** `parseWorthIt()` 依序處理三種輸入：不以 `{` 開頭（裝置忽略了 constraint、直接吐散文）→ 整段當理由；完整 JSON → 嚴格 parse；片段 JSON → 容錯抽取。所以不必為「萬一不支援」另外寫一條 prompt 路徑。指示裡也仍然保留精簡的格式說明當退路。
+- **不要用 schema 的 `maxLength` 控字數**——官方明列的反模式，模型會改用高密度 token 或 emoji 硬湊。長度仍然用指示說。
+
+`responseConstraint` 在真實模型上的行為可以用 demo 的 [`/probe`](../README.md#本機預覽免安裝-extension) 頁按鈕驗證（會回報是否合法 JSON、verdict 是否落在 enum 內）。
+
 ---
 
 ## 評論潤飾（Rewriter，退回 Prompt API）

@@ -54,15 +54,16 @@ export function useWorthIt(): WorthIting {
       setPhase('streaming')
       // 串流：每收到一塊就更新 data，讓泡泡邊生成邊顯示（語氣沿用 popup 設定）
       const result = await generateWorthIt(facts, tone, (acc) => setData(acc))
-      // 模型可能串流結束卻沒吐內容：別進 done（會顯示空白），也別把空字串快取 24h
-      if (!result) {
+      // 模型可能串流結束卻沒吐內容（或只吐出破格的 JSON、抽不出欄位）：
+      // 別進 done（會顯示空白），也別把空字串快取 24h
+      if (!result.text) {
         setError('模型沒有給出判斷，稍後再試試看。')
         setPhase('error')
         return
       }
-      setData(result)
+      setData(result.text)
       setPhase('done')
-      await setCachedWorthIt(productId, tone, result)
+      await setCachedWorthIt(productId, tone, result.text)
     } catch (err) {
       setError(`判斷失敗：${err instanceof Error ? err.message : String(err)}`)
       setPhase('error')
