@@ -106,3 +106,22 @@ Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**�
 2. `vp build --config vite.popup.config.ts` 打包 popup（一般 extension 頁面，可用 ESM，輸出 `dist/popup.html` + JS/CSS）
 
 UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾；popup 是獨立頁面，用一般 `<link>` / `<style>` 即可。
+
+---
+
+## 測試策略
+
+Chrome extension 難測的點在於：真正的環境（真實網站 DOM + 真實內建 AI 模型）既無法進 CI，也無法在單元測試裡模擬。所以分三層，各自只負責抓自己抓得到的東西。
+
+| 層 | 怎麼跑 | 抓得到 | 抓不到 |
+| --- | --- | --- | --- |
+| 單元 | `pnpm test`（vitest + jsdom，`vi.stubGlobal` stub AI API） | prompt 組裝、fallback 分支、快取、字數門檻、phase 轉換 | 真實 DOM selector、框架雙向綁定、注入位置、CSS |
+| demo 頁 | `pnpm demo`（見 [README](../README.md#本機預覽免安裝-extension)） | 注入是否成功、整個互動流程、UI 實際渲染、各種 API 組合下的降級行為 | 真實網站的 DOM 結構、真實模型的輸出品質 |
+| 實機 | 載入 `dist/` 到 Chrome，開真實 kkday 頁面；`/probe` 頁看環境 | selector 是否命中、Nuxt 綁定是否同步、模型輸出品質、API 可用性 | —（但不可自動化、不進 CI） |
+
+幾個刻意的決定：
+
+- **真實 AI API 永遠不進 CI。** 需要模型下載（22GB 空間）、硬體門檻、且輸出不決定性。demo 層的 stub 才是決定性的，適合自動化。
+- **demo 頁負責「降級路徑」。** 評論頁的 `?api=` 參數可以模擬「只有 LanguageModel」（＝一般使用者的真實情況）、「Rewriter 也在」、「兩個都沒有」三種環境，不必真的去改 `chrome://flags` 或換機器。這類環境相依的 bug（例如 Rewriter 沒進穩定版）看程式碼是看不出來的。
+- **框架綁定要有「會變紅」的監控。** 見 README 對評論頁那塊「框架 state」的說明。`writeReviewDraft()` 的 native setter + dispatch event 是給 Nuxt(Vue) 看的，jsdom 沒有框架，所以單元測試對它永遠是綠的。
+- **selector 是最脆弱的地方。** [`getReviewTextarea()`](../src/lib/reviewPage.ts) 目前用「placeholder 關鍵字 → 退回第一個 textarea」的通用寫法。要真正防漂移，得把真實評論頁的 DOM 片段存成 fixture 讓單元測試對它跑（尚未做，需要登入的訂單頁才抓得到）。

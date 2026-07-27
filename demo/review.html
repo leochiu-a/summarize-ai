@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>評論撰寫頁 — Demo</title>
+<style>
+  body { font-family: -apple-system, "PingFang TC", sans-serif; max-width: 720px; margin: 40px auto; line-height: 1.7; color: #222; padding: 0 20px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .order { color: #888; font-size: 14px; margin-bottom: 24px; }
+  textarea { width: 100%; min-height: 160px; padding: 12px; font: inherit; line-height: 1.7; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
+  .submit { margin-top: 12px; padding: 10px 24px; font: inherit; border: 0; border-radius: 6px; background: #ff4f4f; color: #fff; cursor: pointer; }
+  .mirror { margin-top: 28px; padding: 12px 16px; background: #f6f6f6; border-left: 3px solid #999; border-radius: 4px; font-size: 13px; }
+  .mirror h2 { font-size: 13px; margin: 0 0 6px; color: #666; }
+  .mirror pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #333; }
+  .stale { border-left-color: #d33; background: #fff2f2; }
+  .stale h2 { color: #d33; }
+  .badge { position: fixed; top: 12px; left: 12px; font-size: 12px; background: #222; color: #fff; padding: 6px 10px; border-radius: 6px; font-family: ui-monospace, monospace; }
+  .badge a { color: #7fd; }
+</style>
+</head>
+<body>
+
+<div class="badge" id="badge"></div>
+
+<h1>為「東京晴空塔門票」留下評論</h1>
+<div class="order">訂單編號 25KK268720222 · 2026/07/20 出發</div>
+
+<!-- placeholder 要和真實頁面一致：getReviewTextarea() 靠關鍵字（體驗/想法/評論/感想）認框 -->
+<textarea id="draft" placeholder="你覺得這次體驗如何呢？請告訴我們"></textarea>
+<button class="submit" id="submit">送出評論</button>
+
+<!--
+  模擬 Nuxt(Vue) v-model 的行為，用來驗 writeReviewDraft() 的關鍵契約：
+  框架只在收到 input 事件時才同步自己那份 state，「送出」送的是 state 而不是 el.value。
+  如果哪天 writeReviewDraft 只改了 .value 卻沒 dispatch 事件，下面這塊就會變紅、
+  顯示送出去的還是舊值——這個失敗模式在 jsdom 單元測試裡永遠是綠的。
+-->
+<div class="mirror" id="mirror">
+  <h2>框架 state（模擬 Vue v-model —— 送出時真正會送的值）</h2>
+  <pre id="mirrorText">（空）</pre>
+</div>
+
+<script>
+// ── 模擬框架的雙向綁定 ───────────────────────────────────────────
+const draft = document.getElementById('draft')
+const mirror = document.getElementById('mirror')
+const mirrorText = document.getElementById('mirrorText')
+let model = '' // 框架自己那份 state，只有 input 事件會更新它
+
+draft.addEventListener('input', () => {
+  model = draft.value
+  render()
+})
+
+function render() {
+  mirrorText.textContent = model || '（空）'
+  // el.value 和 model 不一致 = 框架沒收到通知，送出會送舊值
+  mirror.classList.toggle('stale', model !== draft.value)
+}
+
+// 這裡刻意用輪詢而不是只在 input 事件裡 render：
+// 要抓的失敗模式正是「有人改了 .value 但沒派發事件」——那種情況不會有事件可以掛，
+// 只在事件裡重繪的話，畫面會停在舊狀態、紅字永遠不亮，等於沒監控。
+setInterval(render, 250)
+
+document.getElementById('submit').addEventListener('click', () => {
+  alert(model === draft.value
+    ? `送出成功，內容：\n\n${model}`
+    : `⚠️ 框架 state 與輸入框不同步！\n\n會送出的舊值：\n${model}\n\n畫面上的新值：\n${draft.value}`)
+})
+
+// ── stub extension runtime ──────────────────────────────────────
+window.chrome = window.chrome || {}
+chrome.runtime = { getURL: (p) => p }
+
+// ── stub 內建 AI ────────────────────────────────────────────────
+// ?api=prompt（預設）→ 只有 LanguageModel，走 fallback 那條路（＝一般使用者的真實情況）
+// ?api=rewriter      → Rewriter 也在，走首選那條路
+// ?api=none          → 兩個都沒有，看錯誤狀態長怎樣
+const api = new URLSearchParams(location.search).get('api') || 'prompt'
+
+// 每次呼叫換一種寫法，讓「重新潤飾」的效果在畫面上看得出來；
+// 同時把有沒有收到「換個說法」的要求標在輸出裡，方便驗 rephrase 有沒有真的傳下去。
+let nth = 0
+function fakeRewrite(draftText, rephraseHintSeen) {
+  const variants = [
+    (t) => `【第 ${nth} 版】${t}。整體來說是不錯的體驗，推薦給大家。`,
+    (t) => `【第 ${nth} 版・換個說法】說真的，${t}。如果你也在考慮，我會說值得一試。`,
+    (t) => `【第 ${nth} 版・再換一次】${t}。總結一下：喜歡這種行程的人應該不會失望。`,
+  ]
+  const body = variants[(nth - 1) % variants.length](draftText.replace(/[。\s]+$/, ''))
+  return body + (rephraseHintSeen ? '（收到「換個說法」的要求 ✅）' : '')
+}
+
+function streamText(text, firstDelay = 900, chunkDelay = 40) {
+  const chunks = text.match(/.{1,4}/gs) || []
+  let i = 0
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next: () => new Promise((r) => setTimeout(() => {
+          i < chunks.length ? r({ value: chunks[i++], done: false }) : r({ value: undefined, done: true })
+        }, i === 0 ? firstDelay : chunkDelay)),
+      }
+    },
+  }
+}
+
+const REPHRASE_MARK = '請換不同的句構與用詞'
+
+if (api !== 'none') {
+  window.LanguageModel = {
+    availability: async () => 'available',
+    create: async () => ({
+      promptStreaming: (prompt) => {
+        nth++
+        // prompt 尾端是「使用者原文：\n<draft>」
+        const body = prompt.split('使用者原文：\n').pop() || ''
+        return streamText(fakeRewrite(body, prompt.includes(REPHRASE_MARK)))
+      },
+      destroy() {},
+    }),
+  }
+}
+
+if (api === 'rewriter') {
+  window.Rewriter = {
+    availability: async () => 'available',
+    create: async () => ({
+      rewriteStreaming: (input, opts) => {
+        nth++
+        return streamText(fakeRewrite(input, (opts?.context || '').includes(REPHRASE_MARK)))
+      },
+      destroy() {},
+    }),
+  }
+}
+
+const label = { prompt: 'LanguageModel only（fallback 路徑）', rewriter: 'Rewriter 可用（首選路徑）', none: '兩個 API 都沒有（錯誤狀態）' }
+document.getElementById('badge').innerHTML =
+  `stub：${label[api]} · 切換 <a href="?api=prompt">prompt</a> / <a href="?api=rewriter">rewriter</a> / <a href="?api=none">none</a>`
+</script>
+<script src="/content.js"></script>
+</body>
+</html>
