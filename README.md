@@ -74,7 +74,24 @@ pnpm run package
 
 ## 本機預覽（免安裝 extension）
 
-`demo/` 底下有測試頁，stub 掉 `chrome.runtime` 與 `Summarizer`，可直接開 `demo/index.html`（文章頁）或 `demo/homepage.html`（非文章頁 + 垃圾過濾）看 UI 與擷取行為。需先 `pnpm run build`（demo 的 `content.js` 由 `dist/` 複製而來，已列入 `.gitignore`）。
+```bash
+pnpm demo
+```
+
+會 build 一次再起一個零依賴的靜態 server（預設 <http://localhost:5174>，`PORT` 可改）。`demo/` 底下的頁面 stub 掉 `chrome.runtime` 與內建 AI API，所以不用安裝 extension、也不用等模型下載就能看 UI 與擷取行為：
+
+| 網址 | 內容 |
+| --- | --- |
+| `/` | 文章頁（整頁摘要） |
+| `/homepage` | 非文章頁（框架垃圾過濾） |
+| `/order/comment/25KK268720222` | 評論撰寫頁（潤飾）。`?api=prompt`（預設，走 Prompt fallback）/ `?api=rewriter` / `?api=none` 可切換 stub 的 API 組合 |
+| `/probe` | **不 stub 任何東西**，列出這台機器上各內建 AI API 的真實 `availability()`。查「為什麼我這裡不能用」先看這頁 |
+
+為什麼需要 server 而不是直接開檔案：評論頁靠 `isReviewPage()` 比對 `location.pathname`（`/order/comment/<id>`），`file://` 做不出那個形狀。
+
+`/content.js` 由 server 直接讀 `dist/content.js`，不用複製。開發時另一個 terminal 跑 `pnpm dev`（watch build），改完存檔重新整理即可（server 一律回 `no-store`）。server 已經在跑的話用 `pnpm demo:serve` 跳過 build。
+
+評論頁上那塊「框架 state」是刻意做的：它模擬 Nuxt(Vue) 的 `v-model` 只在收到 `input` 事件時才同步自己的 state，而「送出」送的是 state 而不是 `el.value`。[`writeReviewDraft()`](src/lib/reviewPage.ts) 哪天少了派發事件那一步，這塊就會變紅並顯示送出去的是舊值——這個失敗模式在 jsdom 單元測試裡永遠是綠的。
 
 ## 專案結構
 
@@ -85,7 +102,8 @@ src/components/    UI 元件：各 buddy、商品摘要卡片、翻譯按鈕、�
 src/hooks/         流程與狀態機：摘要、商品摘要、值不值得、評論潤飾 / 翻譯、model gate、設定
 src/lib/           資料層：內容擷取、商品 / 評論頁偵測、各 AI API 包裝、快取、設定
 src/popup/         設定頁面（獨立 extension 頁面，非 Shadow DOM）
-demo/              免安裝本機預覽頁
+demo/              免安裝本機預覽頁（含 AI API 探測頁）
+scripts/           開發用腳本（demo static server）
 docs/              ARCHITECTURE、隱私權政策、上架文案
 ```
 

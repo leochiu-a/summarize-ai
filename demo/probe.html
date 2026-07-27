@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>內建 AI API 探測 — Demo</title>
+<style>
+  body { font-family: -apple-system, "PingFang TC", sans-serif; max-width: 760px; margin: 40px auto; line-height: 1.7; color: #222; padding: 0 20px; }
+  h1 { font-size: 22px; }
+  p.lead { color: #666; font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; margin: 20px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e5e5; }
+  th { color: #666; font-weight: 600; font-size: 13px; }
+  td.api { font-family: ui-monospace, monospace; }
+  .ok { color: #0a7d3c; font-weight: 600; }
+  .warn { color: #b26a00; font-weight: 600; }
+  .bad { color: #c00; font-weight: 600; }
+  .note { font-size: 13px; color: #666; }
+  button { padding: 9px 18px; font: inherit; border: 1px solid #bbb; border-radius: 6px; background: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  pre { background: #f6f6f6; padding: 12px; border-radius: 6px; white-space: pre-wrap; font-size: 13px; margin-top: 12px; }
+  code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>內建 AI API 探測</h1>
+<p class="lead">
+  這一頁<strong>不 stub 任何東西</strong>，也不載入 content script —— 看的是這台機器、這個 Chrome
+  profile 上的真實狀況。查「為什麼某個功能在我這裡不能用」先看這裡，不要猜。
+</p>
+
+<div id="ua" class="note"></div>
+
+<table>
+  <thead><tr><th>API</th><th>全域</th><th>availability()</th><th>備註</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<p>
+  <button id="run">跑一次真實潤飾（Prompt API）</button>
+  <span class="note">首次使用可能觸發模型下載，所以要按鈕（Chrome 要求使用者手勢）。只跑一次，不會連跑。</span>
+</p>
+<pre id="out" hidden></pre>
+
+<script>
+const ua = navigator.userAgent.match(/Chrome\/(\d+)/)
+document.getElementById('ua').textContent =
+  `Chrome ${ua ? ua[1] : '?'} · ${navigator.platform}`
+
+// Translator / LanguageDetector 的 availability() 需要語言參數，各自給一組合理值
+const APIS = [
+  { name: 'LanguageModel', args: undefined, note: 'Prompt API。extension 從 Chrome 138 起穩定' },
+  { name: 'Summarizer', args: undefined, note: 'Chrome 138 起穩定' },
+  { name: 'Translator', args: { sourceLanguage: 'en', targetLanguage: 'zh-Hant' }, note: 'Chrome 138 起穩定' },
+  { name: 'LanguageDetector', args: undefined, note: 'Chrome 138 起穩定' },
+  { name: 'Rewriter', args: undefined, note: '未進穩定版：origin trial 只到 Chrome 148，之後需 chrome://flags/#rewriter-api' },
+  { name: 'Writer', args: undefined, note: '未進穩定版，同上（chrome://flags/#writer-api）' },
+  { name: 'Proofreader', args: undefined, note: '未進穩定版' },
+]
+
+// 一律加 timeout：availability() 卡住的話整頁不該跟著卡死
+function withTimeout(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout (${ms}ms)`)), ms)),
+  ])
+}
+
+const rows = document.getElementById('rows')
+
+for (const { name, args, note } of APIS) {
+  const tr = document.createElement('tr')
+  const exists = typeof globalThis[name] !== 'undefined'
+  tr.innerHTML =
+    `<td class="api">${name}</td>` +
+    `<td class="${exists ? 'ok' : 'bad'}">${exists ? 'function' : 'undefined'}</td>` +
+    `<td class="cell">${exists ? '檢查中…' : '—'}</td>` +
+    `<td class="note">${note}</td>`
+  rows.appendChild(tr)
+
+  if (!exists) continue
+  const cell = tr.querySelector('.cell')
+  withTimeout(globalThis[name].availability(args))
+    .then((a) => {
+      cell.textContent = a
+      cell.className = 'cell ' + (a === 'available' ? 'ok' : a === 'unavailable' ? 'bad' : 'warn')
+    })
+    .catch((e) => {
+      cell.textContent = `${e.name}: ${e.message}`
+      cell.className = 'cell bad'
+    })
+}
+
+// 用 extension 實際會送的那份 prompt 跑一次，確認輸出乾不乾淨
+// （沒有開場白、沒有引號、沒有 Markdown、沒有杜撰）
+const btn = document.getElementById('run')
+const out = document.getElementById('out')
+
+btn.addEventListener('click', async () => {
+  btn.disabled = true
+  out.hidden = false
+  out.textContent = '準備中…'
+
+  const draft = '這個行程還不錯 導遊很nice 講解也很清楚 但是集合的地方有點難找 走了快十分鐘才找到 車上冷氣有點冷 建議帶外套 整體來說還是推薦啦 CP值ok'
+  const prompt =
+    '你是幫使用者潤飾 KKday 旅遊評論的小幫手。使用者已經寫好一段評論，請用繁體中文（台灣）' +
+    '把它潤飾得更通順、更好讀，讓其他旅客更容易看懂。務必遵守：' +
+    '只根據使用者原文潤飾，不要新增任何他沒提到的細節、地點、數字或感受；' +
+    '不要改變原意、不要誇大、不要杜撰；保留他真實的評價與情緒。' +
+    '輸出純文字（不要 Markdown 符號、不要標題或條列），長度與原文相近即可。' +
+    '\n語氣：溫柔親切、像跟朋友分享。\n' +
+    '只輸出潤飾後的評論本文：不要加開場白、說明、標題或引號，也不要解釋你改了什麼。\n\n' +
+    `使用者原文：\n${draft}`
+
+  try {
+    if (typeof LanguageModel === 'undefined') throw new Error('這個瀏覽器沒有 LanguageModel')
+    const session = await LanguageModel.create({
+      monitor(m) {
+        m.addEventListener('downloadprogress', (e) => {
+          out.textContent = `模型下載中… ${Math.round(e.loaded * 100)}%`
+        })
+      },
+    })
+    let acc = ''
+    for await (const chunk of session.promptStreaming(prompt)) {
+      acc += chunk
+      out.textContent = `原文：\n${draft}\n\n潤飾後：\n${acc}`
+    }
+    session.destroy()
+  } catch (e) {
+    out.textContent = `失敗：${e.name}: ${e.message}`
+  } finally {
+    btn.disabled = false
+  }
+})
+</script>
+</body>
+</html>

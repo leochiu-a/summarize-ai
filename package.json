@@ -7,6 +7,8 @@
     "test": "vp test run",
     "build": "vp build && vp build --config vite.popup.config.ts",
     "dev": "rm -rf dist && DEV_WATCH=1 sh -c 'vp build --watch & vp build --watch --config vite.popup.config.ts & wait'",
+    "demo": "vp build && node scripts/demo-server.mjs",
+    "demo:serve": "node scripts/demo-server.mjs",
     "typecheck": "tsc --noEmit",
     "test:watch": "vp test",
     "package": "pnpm run typecheck && pnpm test && pnpm run build && web-ext build --source-dir dist --artifacts-dir release --overwrite-dest"

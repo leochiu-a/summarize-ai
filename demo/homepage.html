@@ -32,6 +32,6 @@
     chrome.runtime = { getURL: (p) => p };
     window.Summarizer = { availability: async () => 'available', create: async () => ({ summarizeStreaming: () => ({ [Symbol.asyncIterator]() { return { next: () => Promise.resolve({ done: true }) }; } }), destroy() {} }) };
   </script>
-  <script src="content.js?v=13"></script>
+  <script src="/content.js"></script>
 </body>
 </html>
