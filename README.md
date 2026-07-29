@@ -1,6 +1,6 @@
 # Summarize AI Buddy
 
-> 在 [kkday.com](https://kkday.com) 右下角召喚一個 pixel 小夥伴，用 **Chrome 內建 AI** 幫你摘要頁面、看懂商品、潤飾評論、翻譯評論、判斷值不值得買。全程本機運算，內容不上傳。
+> 在 [kkday.com](https://kkday.com) 右下角召喚一個 pixel 小夥伴，用 **Chrome 內建 AI** 幫你摘要頁面、看懂商品、潤飾評論、翻譯評論、判斷值不值得買。小夥伴的功能全程本機運算、內容不上傳；另外有一層實驗性的 [WebMCP tool](#另一條實驗性的路webmcp-tool) 走的是相反方向——把頁面能力開放給你自己帶來的 agent。
 
 一個 Chrome MV3 擴充套件，只在 `kkday.com`（含子網域）上運作，把 Chrome 內建的 Gemini Nano（Summarizer / Prompt / Rewriter / Translator API）包成幾個貼著 KKday 使用情境的小功能。
 

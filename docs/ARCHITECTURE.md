@@ -2,7 +2,7 @@
 
 這份文件記錄各功能的實作細節與踩過的坑。使用說明請看 [README](../README.md)。
 
-擴充套件只在 `kkday.com`（含子網域）運作。所有推論都用 Chrome 內建 AI 在本機執行，內容不上傳。內建 AI 分兩組：
+擴充套件只在 `kkday.com`（含子網域）運作。下面〈WebMCP tool 層〉以外的所有功能，推論都用 Chrome 內建 AI 在本機執行、內容不上傳（WebMCP 那層不用內建 AI，推論在使用者自己帶來的 agent）。內建 AI 分兩組：
 
 - **A 組**（共用 Gemini Nano）：Summarizer / Prompt（`LanguageModel`）/ Rewriter — 頁面摘要、商品摘要卡片、評論潤飾、值不值得分析。其中 Rewriter 尚未進穩定版，評論潤飾會退回 Prompt API（見下方〈評論潤飾〉）。
 - **B 組**（獨立模型）：Translator / LanguageDetector — 翻譯所有評論。

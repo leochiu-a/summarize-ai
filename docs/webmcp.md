@@ -117,8 +117,10 @@ build 時會驗證這件事：`dist/webmcp.js` 裡不應出現任何 `chrome.` �
 而且是唯一的寫入型 tool——砍掉之後整組變成純唯讀，安全邊界乾淨很多。
 
 附帶好處：被砍的那幾支正是最脆弱的部分（綁 `.tag-badge-wrapper`、`.option-content`、
-`.kk-chip--selected` 這些會隨改版消失的 class）。少維護三份會漂移的 selector，bundle 也從
-23.6 KB 降到 13.6 KB。
+`.kk-chip--selected` 這些會隨改版消失的 class）。少維護三份會漂移的 selector。
+
+（bundle 一度砍到 13.6 KB，但 `check_package_availability` 改打 API 之後又回到
+**實測 19.99 KB / gzip 8.79 KB**。這個數字會變，要用就現場量 `pnpm run build` 的輸出。）
 
 留下 `check_package_availability` 的理由是它**不在包裝 DOM**：對照組為了確認一個商品在 8/15
 能不能訂，得點方案 → 開日曆 → 截圖判讀，而可訂性矩陣在頁面上只存在於畫素裡。這跟 search
