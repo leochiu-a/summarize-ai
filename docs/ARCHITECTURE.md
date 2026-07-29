@@ -102,170 +102,31 @@ Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**�
 
 跟上面所有功能相反的方向：前面每一項都是「我們自己在瀏覽器裡跑一個小模型」，這一層是
 **把頁面的能力開放給使用者自己帶來的 agent**（Gemini in Chrome、Claude in Chrome、
-透過 `chrome-devtools-mcp` 接進來的 Claude Code…）。
+透過 `chrome-devtools-mcp` 接進來的 Claude Code…）。它繞開了內建 AI 的兩個硬限制——繁體中文
+不在 Gemini Nano 支援語言內、mobile 完全不支援——因為推論不在我們這邊做，我們只負責提供
+結構化事實。
 
-差別很關鍵：內建 AI 卡在兩個硬限制上——繁體中文不在 Gemini Nano 支援語言內、mobile 完全
-不支援。WebMCP 兩個都不適用，因為推論不在我們這邊做，我們只負責提供結構化事實。
+程式在 [`src/webmcp.ts`](../src/webmcp.ts)（註冊層）與
+[`src/lib/webmcpTools.ts`](../src/lib/webmcpTools.ts)（tool 定義）。**只有兩支，而且都是唯讀**：
+`search_products`（全站）打 SRP 自己在用的搜尋 API；`check_package_availability`（商品頁）打
+可訂性 API，回逐方案可訂與否 + 剩餘數量。
 
-### 為什麼需要第二支 content script
+架構上要知道的三件事：
 
-`document.modelContext` 是 **page world** 的物件。原本的 `content.js` 跑在 MV3 預設的
-ISOLATED world，那裡有自己一份 `document`，看不到頁面的 `modelContext`。所以 manifest 多了
-一筆 `"world": "MAIN"` 的 entry 指向 `webmcp.js`。
+- **它是第二支 content script，跑在 MAIN world。** `document.modelContext` 是 page world 的
+  物件，MV3 預設的 ISOLATED world 有自己一份 `document`，看不到它。代價是 MAIN world 拿不到
+  `chrome.*`，所以 `src/webmcp.ts` 只能 import 不碰 chrome API 的 lib 模組（`productPage` /
+  `packageAvailability` / `packageCalendar` / `productSearch`），不能用 `settings.ts` 與三個
+  cache 模組。build 後 `dist/webmcp.js` 裡不應出現任何 `chrome.` 參照。
+- **它是提案原型，不是上線路徑。** WebMCP 是給網站作者用的 API；這裡是用擴充套件在 kkday.com
+  上「代替網站」註冊 tool，目的是在動 Nuxt 之前先驗證 tool 的粒度、schema 與輸出大小對 agent
+  好不好用。正式做法是把同一組定義搬進 KKday 自己的前端。
+- **曾經有 7 支，benchmark 之後砍到 2 支。** 判準是：**WebMCP 省的是「跨頁抓取與多步互動」，
+  不是「包裝單頁資料」**——商品頁那 12,000 字本來就 100% SSR、一次在 DOM 裡，包成 tool 實測
+  反而更貴。剩下的兩支都不在包裝 DOM。
 
-代價：MAIN world 拿不到 `chrome.*`，因此 [`src/webmcp.ts`](../src/webmcp.ts) 只能 import
-不碰 chrome API 的 lib 模組（`productPage` / `packageAvailability` / `packageCalendar` / `productSearch`
-都符合），
-不能用 `settings.ts` 與三個 cache 模組。
-build 時會驗證這件事：`dist/webmcp.js` 裡不應出現任何 `chrome.` 參照。
-
-### 註冊了哪些 tool
-
-| 頁面 | tool | readOnly | 做什麼 |
-| --- | --- | --- | --- |
-| **全站** | `search_products` | ✅ | 搜尋並回傳候選集：關鍵字 + 評分門檻 + 評論數門檻 + 排序 |
-| 商品頁 | `check_package_availability` | ✅ | 打可訂性 API：單日回逐方案可訂與否 + 剩餘數量；範圍回可訂日期。另附 DOM 交叉檢核的 warning |
-
-就這兩支，而且都是唯讀。
-
-### 為什麼只有兩支（benchmark 之後的取捨）
-
-曾經有 7 支。2026-07-28 用四個乾淨 agent 做了 A/B（見 [`webmcp-benchmark.md`](webmcp-benchmark.md)）：
-
-| 任務 | 有 tool 的差異 |
-| --- | --- |
-| 探索（首頁找商品，列表 590 筆／59 頁） | **-68% 呼叫、-48% token、-72% 時間** |
-| 決策支援（商品頁 12,000 字條文） | **+17% 呼叫、+3% token、+16% 時間** |
-
-結論：**WebMCP 省的是「跨頁抓取與多步互動」，不是「包裝單頁資料」。**商品頁 100% SSR，
-12,000 字一次就在 DOM 裡，agent 自己讀更便宜；包一層 tool 只是多了「先 index 再逐段取」的往返。
-
-所以砍掉 `get_product_terms`、`get_product_facts`、`get_product_reviews`（包的是 DOM 已有的資料）
-與 `read/write_review_draft`（成本低但沒有實測價值，而且是唯一的寫入型 tool——砍掉之後整組變成
-純唯讀，安全邊界乾淨很多）。
-
-留下 `check_package_availability` 的理由是它**不在包裝 DOM**：對照組為了確認一個商品在 8/15
-能不能訂，得點方案 → 開日曆 → 截圖判讀，而可訂性矩陣在頁面上只存在於畫素裡。這跟 search
-同一類價值。
-
-### check_package_availability 已改成打可訂性 API
-
-程式在 [`src/lib/packageCalendar.ts`](../src/lib/packageCalendar.ts)。原本是讀畫面上的 badge
-文字反推，那個做法有兩個被實測抓到的致命問題：
-
-1. **使用者沒在 UI 上選日期時，畫面上根本沒有可訂性資訊**，tool 就答不了「8/15 訂得到嗎」
-   —— 而那正是使用者唯一想問的問題
-2. **畫面會說謊。**DOM 版回報四個方案全部 `selectable`，但 API 顯示其中一個
-   （pkg 1986735「冬春季限定」）**整個 8 月完全不可訂**。畫面上它是可點的 chip、沒有任何 badge
-
-現在改打 `GET /api/_nuxt/product/fetch-items-data`，一次拿整個月的逐日
-`is_saleable` / `is_sold_out` / **`remain_qty`**。實測 8/15：
-
-| pkg_oid | 8/15 | 8 月不可訂 |
-| --- | --- | --- |
-| 1466529 | ✅ 剩 37 | 13 天（隔天交錯） |
-| 1964950 | ✅ 剩 41 | 5 天 |
-| 1965289 | ✅ 剩 37 | 13 天 |
-| **1986735** | **❌** | **全部 31 天** |
-
-`pkgOid` 與 `itemOidList[]`（必填，少了回 HTTP 500）從 `window.__NUXT__` 撈 ——
-**這是 WebMCP 層跑在 MAIN world 的直接好處**，ISOLATED world 拿不到頁面的 JS 變數。
-方案物件形狀是 `{ pkg_oid, items: number[], name }`，埋在 payload 深處要遞迴找、且會重複出現。
-
-`packageAvailability.ts`（讀 DOM 那份）保留下來當**交叉檢核**：比對「API 說不可訂」vs
-「畫面說可點」，它產出的 a11y 與 dead-end warning 會一併附進 tool 輸出。
-
-⚠️ 這支 endpoint 路徑帶 `_nuxt`，是前端專用 BFF、不是對外承諾的介面，會隨重構改動。
-
-附帶好處：被砍的那幾支正是最脆弱的部分（綁 `.tag-badge-wrapper`、`.option-content`、
-`.kk-chip--selected` 這些會隨改版消失的 class）。少維護三份會漂移的 selector，bundle 也從
-23.6 KB 降到 13.6 KB。
-
-### search_products 的設計要點
-
-SRP 一頁只給 10 筆（590 筆 = 59 頁，分頁按鈕還沒有 `href`），篩選器只有 6 組、**沒有日期也沒有
-評分**。而實機驗證發現 `ajax_get_product_list` 每筆商品本來就回 `rating_star` 與
-`earliest_sale_date`——UI 缺的那兩個維度，後端一直都給了。
-
-但**只有評分與評論數這兩個維度站得住**：價格是「起價」（票券受日期影響、esim 受方案跨度影響，
-實測日本 eSIM 是 16–1841 共 115 倍），日期只是「最早開賣日」（esim 全部都是今天）。所以這支
-tool 刻意**不做**價格與日期篩選，改成把 `priceFrom`/`priceTo`/`earliestDate` 完整交出去讓模型
-自己判斷。實作細節與踩到的坑見 [`src/lib/productSearch.ts`](../src/lib/productSearch.ts) 檔頭。
-
-### 幾個刻意的決定
-
-- **依頁面註冊，不一次全開。** Chrome 明文建議：tool 越多、越相似，agent 越選不對。
-  所以 `check_package_availability` 只在商品頁註冊。
-- **註銷只能靠 `AbortController`。** 現行 spec 已移除 `unregisterTool()` 與 `clearContext()`，
-  換頁時是 abort 舊的 signal 再重新註冊。
-- **輸出一律壓在 1500 字元內並標註截斷。** KKday PDP 單頁 9,000–12,000 字，整頁倒給 agent
-  只會塞爆 context。截斷不標註更糟——agent 會拿殘缺資料當完整事實。
-- **數字只複製不生成。** 價格一律原樣回傳頁面字串或 JSON-LD 數字，這一層不做加總、比較、
-  排序。要比價就讓 agent 自己拿數字去比，網站不背書。
-- **全部唯讀，也沒有任何送出訂單 / 付款的 tool。** 錯誤成本不對稱：摘要平淡使用者聳聳肩，
-  扣錯款是客訴、退款與法遵問題。單元測試有兩條在守這件事（全部 readOnlyHint、名稱不含
-  submit/pay/checkout/order）。
-- **錯誤回傳可自我修正的訊息，不 throw。** 例如 topic 打錯會回「可用的 topic 有哪些」，
-  讓模型自己改參數重試。Chrome 明文建議 schema 約束不保證生效，要靠描述性錯誤兜。
-- **含 UGC / 供應商文案的輸出全標 `untrustedContentHint`。** 評論與商品條文是 prompt
-  injection 的天然載體（spec §6.3.1.2 Output Injection）。
-
-### `check_package_availability` 為什麼值得單獨講
-
-日期 × 方案的可訂性矩陣在 KKday 目前**只存在於畫素裡**——沒有 URL 參數、沒有可讀的 API，
-DOM 上只有一段中文 badge 文字。而 2026-07-27 走查抓到：標示「該日期無法訂購」的方案卡
-**仍然可以點**（無 `disabled`、`aria-disabled` 為 null、`pointer-events:auto`），點下去撞的
-modal 叫你改日期，而改日期的 modal 叫你改方案——循環死巷。
-
-[`packageAvailability.ts`](../src/lib/packageAvailability.ts) 因此除了狀態，還回報 `clickable`，
-讓「不可訂卻可點」這個矛盾直接出現在 tool 輸出的 `warnings` 裡。意義是把一個只存在人工走查
-筆記裡的 bug，變成**每次呼叫都會自己舉手**的訊號。demo 頁上有個「修好方案卡」按鈕可以現場
-驗證：按下去加上 `aria-disabled`，那筆 warning 就消失。
-
-### 實機驗證教會我們的三件事
-
-在真實 kkday.com 上跑過之後才發現的問題，單元測試一個都抓不到，因為 mock 是照「我以為的
-形狀」寫的：
-
-1. **同一個 PDP 模板底下是兩套完全不同的 DOM。**票券型的方案是 `.option-content` 卡片
-   加 `button.select-option`；一日遊型是 `.tag-badge-wrapper > .kk-chip` radio chip，
-   **完全沒有「選擇」按鈕**。只靠按鈕文字反查會在一日遊型抓到 0 個方案。
-2. **搜尋 API 的回傳是巢狀的**（`data.data` 才是商品陣列，外層 `data` 是 metadata）。
-   一開始用遞迴找陣列誤判成扁平結構，測試全綠、真頁面直接炸。
-3. **`earliest_sale_date` 是緊湊格式 `20260729`，不是 `2026-07-29`。**
-   直接跟 `YYYY-MM-DD` 做字串比較，`'20260729' > '2026-08-15'` 恆為 true，
-   **結果每一筆商品都被日期條件排除、命中永遠 0**——而且不報錯，只是安靜地回空清單，
-   看起來像「沒有符合的商品」。
-
-第 3 點是最值得記住的失敗模式：**錯誤沒有訊號**。這也是為什麼三層測試策略裡
-「實機」那一層不能省，以及為什麼 mock 的形狀必須來自實機觀察而不是推測。
-
-### 定位（不要誤讀）
-
-**WebMCP 是給網站作者用的 API。** 這支 script 是用擴充套件在 kkday.com 上「代替網站」註冊
-tool，目的是在動 Nuxt 之前先驗證 tool 的粒度、schema 與輸出大小對 agent 好不好用。
-它是提案原型，不是上線路徑——正式做法是把同一組 tool 定義搬進 KKday 自己的前端，
-直接接既有的 client-side 邏輯與 server 端事實（尤其是價格與庫存，那些不該從 DOM 反解）。
-
-### 怎麼實際跑起來
-
-WebMCP 目前是 W3C Community Group Draft，Chrome 在 origin trial（M149–M156），預設關閉：
-
-```bash
-# 1. 開 flag：chrome://flags/#enable-webmcp-testing → Enabled → 重開
-#    或用 CLI：
-open -a "Google Chrome" --args --enable-features=WebMCP
-
-# 2. 從 MCP client（Claude Code / Cursor…）呼叫頁面上的 tool
-npx chrome-devtools-mcp@latest --categoryExperimentalWebmcp
-#    → list_webmcp_tools / execute_webmcp_tool
-```
-
-不想開 flag 的話，`pnpm demo` 的 `/zh-tw/product/12319` 頁自帶一份最小 polyfill 與 tool
-檢視器，可以直接按下去看每支 tool 的真實輸出與字元數。
-
-如果站方送了 `Origin-Agent-Cluster: ?0`（搭配 `document.domain` 用的），整個 WebMCP API 會被
-**靜默停用**，沒有任何錯誤訊息——這是上線前一定要先確認的一件事。
+完整的設計理由、benchmark 數據與 eval 腳本在 [`webmcp.md`](webmcp.md)；
+需要 KKday 前後端配合的事整理在 [`kkday-findings.md`](kkday-findings.md)。
 
 ---
 

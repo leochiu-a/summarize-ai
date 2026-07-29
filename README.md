@@ -30,14 +30,16 @@ Claude Code…）。這條路繞開了內建 AI 的兩個硬限制——繁中�
 | `search_products` | 全站 | 打 SRP 自己在用的 API，掃 60 筆回 12 筆候選，含評分／評論數／價格區間／最早可出發日 |
 | `check_package_availability` | 商品頁 | 打站方可訂性 API：問單日回逐方案可訂與否 + **剩餘數量**，問範圍回可訂日期清單。**不需要使用者先在頁面上選日期** |
 
-曾經有 7 支，[benchmark](docs/webmcp-benchmark.md) 之後砍到 2 支：**WebMCP 省的是「跨頁抓取與
-多步互動」，不是「包裝單頁資料」。**商品頁那 12,000 字本來就 100% SSR、一次在 DOM 裡，包成 tool
-實測反而更貴，所以 `get_product_terms` / `get_product_facts` / `get_product_reviews` 與
-`read/write_review_draft` 全部移除。**沒有任何會改狀態的 tool，也沒有送出訂單或付款的 tool。**
+曾經有 7 支，[benchmark](docs/webmcp.md#benchmark為什麼從-7-支砍到-2-支) 之後砍到 2 支：
+**WebMCP 省的是「跨頁抓取與多步互動」，不是「包裝單頁資料」。**商品頁那 12,000 字本來就
+100% SSR、一次在 DOM 裡，包成 tool 實測反而更貴，所以 `get_product_terms` /
+`get_product_facts` / `get_product_reviews` 與 `read/write_review_draft` 全部移除。
+**沒有任何會改狀態的 tool，也沒有送出訂單或付款的 tool。**
 
 要跑起來：Chrome 需開 `chrome://flags/#enable-webmcp-testing`（WebMCP 目前是 origin trial；
 實測 Chrome 151 原生已可用）。不想開 flag 就跑 `pnpm demo` 開 `/zh-tw/product/12319`，那頁自帶
-polyfill 與 tool 檢視器。設計理由與限制見 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+polyfill 與 tool 檢視器。完整的設計理由、benchmark 與 eval 腳本見
+[`docs/webmcp.md`](docs/webmcp.md)。
 
 ## 需求
 
