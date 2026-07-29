@@ -77,8 +77,12 @@ pnpm run build
 
 點瀏覽器工具列的 extension 圖示開啟設定。設定存在 `chrome.storage.local`，跨分頁即時同步（存檔後已開啟的分頁馬上套用）：
 
+- **小夥伴總開關**：關掉之後所有頁面都不注入任何東西——小夥伴、商品摘要卡片、翻譯按鈕、已翻好的譯文、WebMCP tool 全部就地拆掉，頁面上不留痕跡。開回來也是就地恢復，不必重新整理。
+- **在這頁停用**：只讓當前這一個頁面不要運作，其他頁面照常。popup 會顯示當前分頁的路徑，一鍵加入／移出停用清單。
 - **語氣**：幽默😜／正經🧐／溫柔🤗／熱血🔥／厭世🥱／文青🌸（預設幽默）。透過 `sharedContext` 影響模型口吻。
 - **摘要類型**：對應 Summarizer API 的 `type`——重點 / 懶人包 / 開場白 / 標題。
+
+> 「這一頁」的判斷會正規化網址：忽略 `www.`、忽略語系前綴（`/zh-tw`、`/en`）、忽略 query 與 hash。所以同一個商品換語言看還是同一頁，停用一次就好。規則在 [`src/lib/pageScope.ts`](src/lib/pageScope.ts)。
 
 語氣與摘要類型不同會各自快取。
 
@@ -126,6 +130,15 @@ pnpm demo
 | `/order/comment/25KK268720222` | 評論撰寫頁（潤飾）。`?api=prompt`（預設，走 Prompt fallback）/ `?api=rewriter` / `?api=none` 可切換 stub 的 API 組合 |
 | `/zh-tw/product/12319` | 商品頁 + **WebMCP tool 檢視器**。列出註冊到的 tool，可直接執行看真實輸出與字元數；沒有原生 `document.modelContext` 時自動裝一份最小 polyfill |
 | `/probe` | **不 stub 任何東西**，列出這台機器上各內建 AI API 的真實 `availability()`。查「為什麼我這裡不能用」先看這頁 |
+
+demo 頁沒有 popup，但 [`demo/stub-storage.js`](demo/stub-storage.js) 有 stub 一份記憶體版 `chrome.storage`，可以在 console 直接試開關（開關那條路徑最容易壞的地方是「就地拆掉已注入的 UI」，不是重新整理後的狀態）：
+
+```js
+buddyDemo.off()              // 關總開關 → 小夥伴與注入的 UI 應該就地消失
+buddyDemo.on()               // 開回來 → 應該就地回來
+buddyDemo.disableThisPage()  // 只停用這一頁
+buddyDemo.settings()         // 看目前存了什麼
+```
 
 要用 server 而不是直接開檔案，是因為頁面偵測比對 `location.pathname`，`file://` 做不出那個形狀。開發時另一個 terminal 跑 `pnpm dev`（watch build），改完存檔重新整理即可（server 一律回 `no-store`、直接讀 `dist/`）。server 已經在跑的話用 `pnpm demo:serve` 跳過 build。
 

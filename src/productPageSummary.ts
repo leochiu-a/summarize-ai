@@ -11,12 +11,12 @@ import { createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ProductSummaryCard } from './components/ProductSummaryCard'
 import { geminiNanoAvailabilitySync, onGateChange } from './lib/modelGate'
+import { isBuddyEnabledHere } from './lib/pageScope'
 import {
   PRODUCT_SUMMARY_HOST_ID,
   findDescSection,
   findDescTitle,
   isProductPage,
-  onRouteChange,
   waitForDescSection,
 } from './lib/productPage'
 import productSummaryStyles from './productSummary.css?inline'
@@ -37,6 +37,8 @@ let cancelHydrationWait: (() => void) | null = null
 let hydrationSettled = false
 // 等 Gemini Nano 下載完成廣播的解除函式（gate 未就緒時訂閱，就緒後重跑 bootstrap）
 let cancelGateWait: (() => void) | null = null
+// 是否已對「當前頁面」啟動過：設定變更（例如只改語氣）也會重跑 start，用它防重複掛 observer
+let running = false
 
 /**====================== 工具 ======================*/
 /**
@@ -169,6 +171,9 @@ function unmountProductSummary(): void {
  */
 function bootstrapProductSummary(): void {
   if (!isProductPage()) return
+  // 總開關關閉 / 這頁被停用。這裡再擋一次是給「下載完成廣播」這條非同步回頭路用的：
+  // 使用者可能在等下載的期間就把小夥伴關掉了。
+  if (!isBuddyEnabledHere()) return
 
   // Gemini Nano 未就緒：不注入，等下載完成廣播（available）再重跑一次
   if (geminiNanoAvailabilitySync() !== 'available') {
@@ -196,14 +201,19 @@ function bootstrapProductSummary(): void {
 
 /**====================== 進入點 ======================*/
 /**
- * 啟動商品頁 AI 摘要功能：首次執行 + 監聽 SPA 站內導航重跑。非商品頁自動 no-op。
+ * 對當前頁面啟動商品頁 AI 摘要卡片（冪等；非商品頁、或小夥伴被關掉時自動 no-op）。
+ * SPA 站內導航與開關變更由 content script 統一編排（先 stop 再 start），這裡不自己監聽路由。
  */
 export function startProductPageSummary(): void {
-  // SPA 站內導航：拆掉舊卡片，對新頁重跑
-  onRouteChange(() => {
-    unmountProductSummary()
-    bootstrapProductSummary()
-  })
-
+  if (running) return
+  running = true
   bootstrapProductSummary()
+}
+
+/**
+ * 拆掉卡片與所有監聽（SPA 換頁、總開關關閉、或換到停用頁時呼叫）。
+ */
+export function stopProductPageSummary(): void {
+  running = false
+  unmountProductSummary()
 }

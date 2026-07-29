@@ -195,7 +195,97 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* ---------- auto-run toggle ---------- */
+/* ---------- 總開關關閉時：底下細項整組壓暗 ----------
+   互動與鍵盤 focus 由 JSX 的 inert 屬性擋掉（pointer-events 擋不住 tab），這裡只負責視覺 */
+.settings-body {
+  transition: opacity 0.18s ease;
+}
+.settings-body[inert] {
+  opacity: 0.4;
+}
+
+/* ---------- 這個頁面（逐頁停用）---------- */
+.page-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  background: var(--paper-hi);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 7px 9px;
+  margin-bottom: 7px;
+  /* 長路徑不撐破 320px 的 popup，也不要換行成一大塊 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-btn {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 9px 4px;
+  font-size: 12.5px;
+  font-weight: 800;
+  background: var(--paper-hi);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease;
+}
+.page-btn:hover { background: var(--sun); }
+.page-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); }
+/* 已停用：反白成「關掉了」的狀態，按下去是還原 */
+.page-btn.on { background: var(--ink); color: var(--paper); }
+.page-btn.on:hover { background: var(--teal-deep); }
+
+.page-list {
+  list-style: none;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 108px;
+  overflow-y: auto;
+}
+.page-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 5px 5px 8px;
+  background: rgba(38, 36, 55, 0.06);
+  border-radius: 7px;
+}
+.page-item-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-item-del {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  background: var(--paper-hi);
+}
+.page-item-del:hover { background: var(--sun); }
+
+/* ---------- 總開關 / toggle ---------- */
 .toggle-row {
   all: unset;
   cursor: pointer;

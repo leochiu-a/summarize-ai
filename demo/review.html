@@ -140,6 +140,8 @@ const label = { prompt: 'LanguageModel only（fallback 路徑）', rewriter: 'Re
 document.getElementById('badge').innerHTML =
   `stub：${label[api]} · 切換 <a href="?api=prompt">prompt</a> / <a href="?api=rewriter">rewriter</a> / <a href="?api=none">none</a>`
 </script>
+<!-- 開關（總開關 / 逐頁停用）存在 chrome.storage，demo 要 stub 才試得到；必須在 content.js 之前 -->
+<script src="/stub-storage.js"></script>
 <script src="/content.js"></script>
 </body>
 </html>

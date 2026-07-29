@@ -7,15 +7,19 @@
 import { createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ReviewTranslateButton } from './components/ReviewTranslateButton'
+import { isBuddyEnabledHere } from './lib/pageScope'
 import {
   REVIEW_TRANSLATE_HOST_ID,
   findReviewButtonAnchor,
   findReviewSection,
   isProductPage,
-  onRouteChange,
   waitForReviewSection,
 } from './lib/productPage'
-import { TRANSLATION_NODE_ATTR, detectorAvailability } from './lib/reviewTranslate'
+import {
+  TRANSLATION_NODE_ATTR,
+  detectorAvailability,
+  removeInjectedTranslations,
+} from './lib/reviewTranslate'
 import reviewTranslateStyles from './reviewTranslate.css?inline'
 
 // 譯文節點是就地插進 KKday 的 light DOM（非 shadow），需要一份 global style 才吃得到樣式。
@@ -48,6 +52,8 @@ function ensureGlobalTranslationStyle(): void {
 let buttonRoot: Root | null = null
 let sectionObserver: MutationObserver | null = null
 let cancelWait: (() => void) | null = null
+// 是否已對「當前頁面」啟動過：設定變更（例如只改語氣）也會重跑 start，用它防重複掛 observer
+let running = false
 
 /**====================== 工具 ======================*/
 function debounce(fn: () => void, ms: number): () => void {
@@ -104,10 +110,15 @@ function unmountReviewTranslate(): void {
   buttonRoot?.unmount()
   buttonRoot = null
   document.getElementById(REVIEW_TRANSLATE_HOST_ID)?.remove()
+  // 譯文與它的 global style 是就地插在 KKday 的 light DOM，不像 Shadow host 會跟著一起消失，
+  // 得自己收回來，評論區才會回到原本的樣子（小夥伴關掉後不留痕跡）。
+  removeInjectedTranslations()
+  document.getElementById(INJECTED_STYLE_ID)?.remove()
 }
 
 function bootstrapReviewTranslate(): void {
   if (!isProductPage()) return
+  if (!isBuddyEnabledHere()) return // 總開關關閉 / 這頁被停用
 
   // B 組 gate（獨立於 Gemini Nano）：LanguageDetector 連「可下載」都不是（unavailable，
   // 即裝置不支援）就不注入按鈕。downloadable/available 都放行——按鈕第一次點擊即為下載手勢
@@ -119,6 +130,7 @@ function bootstrapReviewTranslate(): void {
   }
   void detectorAvailability().then((avail) => {
     if (cancelled || avail === 'unavailable') return
+    if (!isBuddyEnabledHere()) return // 檢查途中被關掉
     ensureGlobalTranslationStyle()
     cancelWait = waitForReviewSection((section) => {
       injectButton(section)
@@ -134,13 +146,19 @@ function bootstrapReviewTranslate(): void {
 
 /**====================== 進入點 ======================*/
 /**
- * 啟動商品頁評論翻譯功能：首次執行 + 監聽 SPA 站內導航重跑。非商品頁自動 no-op。
+ * 對當前頁面啟動商品頁評論翻譯（冪等；非商品頁、或小夥伴被關掉時自動 no-op）。
+ * SPA 站內導航與開關變更由 content script 統一編排（先 stop 再 start），這裡不自己監聽路由。
  */
 export function startProductPageReviews(): void {
-  onRouteChange(() => {
-    unmountReviewTranslate()
-    bootstrapReviewTranslate()
-  })
-
+  if (running) return
+  running = true
   bootstrapReviewTranslate()
+}
+
+/**
+ * 拆掉按鈕、已注入的譯文與所有監聽（SPA 換頁、總開關關閉、或換到停用頁時呼叫）。
+ */
+export function stopProductPageReviews(): void {
+  running = false
+  unmountReviewTranslate()
 }

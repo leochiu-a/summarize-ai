@@ -120,6 +120,15 @@ is no ordering, checkout, or payment capability. When the user's agent
 invokes a tool, the returned information is handled by that agent under
 its own privacy policy; the extension itself transmits nothing.
 
+The same kkday.com host pattern is also declared under host_permissions so
+that the extension's own settings popup can read the URL of the currently
+active tab. This is needed for the "disable on this page" control, which
+lets the user turn the avatar off for one specific page. Only the URL is
+read, only for kkday.com tabs, only while the popup is open, and it is
+compared locally against the user's own list of disabled pages. We do not
+request the broader "tabs" permission, so URLs of non-kkday tabs are never
+visible to the extension.
+
 Host permission is limited to kkday.com and its subdomains only — the
 extension does not run on, and has no access to, any other website.
 ```
@@ -128,9 +137,10 @@ extension does not run on, and has no access to, any other website.
 
 ```text
 The storage permission is used to save the user's own preferences locally
-via chrome.storage.local: their chosen tone (humorous, serious, gentle,
-passionate, cynical, literary) and summary type (key points, TL;DR, teaser,
-headline). It also stores a short-lived local cache of previously generated
+via chrome.storage.local: whether the avatar is enabled at all, a list of
+individual pages the user has chosen to disable it on, their chosen tone
+(humorous, serious, gentle, passionate, cynical, literary) and summary type
+(key points, TL;DR, teaser, headline). It also stores a short-lived local cache of previously generated
 results — page summaries (30 minutes, keyed by page URL) and product
 summaries (24 hours, keyed by product ID) — so revisiting the same page
 doesn't unnecessarily re-run the on-device AI model. All of this data stays

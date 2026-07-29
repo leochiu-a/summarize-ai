@@ -11,6 +11,34 @@
 
 ---
 
+## 開關（總開關 / 逐頁停用）
+
+程式在 [`src/lib/pageScope.ts`](../src/lib/pageScope.ts)（判斷）、[`src/content.tsx`](../src/content.tsx)（編排）、[`src/lib/scopeSignal.ts`](../src/lib/scopeSignal.ts)（跨 world 傳遞）。
+
+設定有兩個欄位：`enabled`（總開關）與 `disabledPages`（逐頁停用清單）。兩者都在 popup 調，存在 `chrome.storage.local`。
+
+**判斷刻意做成同步的。** `getSettingsSync()` 讀記憶體快取，注入層在「建立 UI 之前」就能決定要不要出現；如果等 async 讀 storage，停用頁會先閃一下小夥伴才消失。代價是進入點必須先 `await getSettings()` 補水一次（見 `content.tsx` 的兩階段啟動）。
+
+**page key 的正規化**（`pageKeyFromUrl()`）：`host/path`，其中
+
+- 去掉 `www.` → `www.kkday.com` 與 `kkday.com` 是同一頁
+- 去掉語系前綴（`/zh-tw`、`/en`，只認 `xx` / `xx-yyyy` 這個形狀，不會誤吃 `/product`）→ 同一個商品換語言看還是同一頁，不必逐語系各停用一次
+- 丟掉 query 與 hash → 排序參數、錨點不算不同頁
+
+**content.tsx 是唯一的路由與開關編排者。** 原本三個注入模組各自 `onRouteChange()`，現在集中在 content.tsx（`unmountAll()` 再 `applyScope()`）。兩個好處：少 patch 幾次 `history` API；拆除順序是確定的（`onRouteChange` 的 unsubscribe 會還原自己訂閱時抓到的 `pushState`，多方各自 patch 再各自還原，順序一錯就互相蓋掉）。注入模組改成 `startX()` / `stopX()`，各自冪等。
+
+**「關掉就不留痕跡」要收的不只 Shadow host。** 小夥伴、商品卡片、翻譯按鈕都在自己的 Shadow DOM，host 一移除就乾淨；但**已翻好的譯文與它的 global style 是就地插在 KKday 的 light DOM**，得另外呼叫 `removeInjectedTranslations()` 收回來（見 `unmountReviewTranslate()`）。
+
+### WebMCP 為什麼要一個 DOM 屬性當訊號
+
+`webmcp.js` 跑在 **MAIN world**（`document.modelContext` 是 page world 的物件），那裡沒有 `chrome.*`，讀不到開關。兩個 world 唯一共用的是 DOM，所以用 `<html>` 上的 `data-summarize-ai` 屬性傳話：ISOLATED world 的 content.js 寫，webmcp.js 讀 + `MutationObserver` 訂閱。
+
+語意是「**有屬性 = 啟用**」而不是 `="0" / "1"`——停用時屬性整個移除，才真的不留痕跡。代價是 MAIN world 分不出「使用者關掉了」與「content.js 還沒公布」，兩者都當停用（fail closed）。這是刻意的：寧可晚幾毫秒註冊 tool，也不要在使用者關掉的情況下把 tool 掛上去。
+
+> demo 的 `/product/<id>` 頁只載 `webmcp.js`、沒有 `content.js`，所以它自己補上這個屬性（見 `demo/product.html` 的註解），否則 tool 會因為「沒人說可以」而全部不註冊。
+
+---
+
 ## 內容擷取（頁面摘要）
 
 程式在 [`src/lib/summarizer.ts`](../src/lib/summarizer.ts)。
@@ -36,7 +64,7 @@
 只在商品頁（URL 形如 `/product/<id>`）觸發，由 [`src/productPageSummary.ts`](../src/productPageSummary.ts) 編排、資料層在 `src/lib/product*.ts`。
 
 1. **偵測與定位**（[`src/lib/productPage.ts`](../src/lib/productPage.ts)）：`isProductPage()` 認出商品頁；`findDescSection()` 以 `#product-info-sec` 為主、退回用「商品說明」標題文字反查外框（不綁 Vue `data-v-*` / 樣式 class，避免改版誤傷）；`extractDescText()` 抽出去掉標題與雜訊的內文（截斷 6000 字）。
-2. **等待與注入**：KKday 是 Nuxt SPA，`waitForDescSection()` 用 `MutationObserver` 等區塊 render 完成，才把獨立 Shadow DOM host 插在「商品說明」標題正下方（樣式隔離、不依賴宿主 CSS）。`onRouteChange()` patch `history` API，站內導航切換商品時拆掉舊卡片重跑；另有 sentinel + observer 守住被框架 re-render 洗掉時重新注入。
+2. **等待與注入**：KKday 是 Nuxt SPA，`waitForDescSection()` 用 `MutationObserver` 等區塊 render 完成，才把獨立 Shadow DOM host 插在「商品說明」標題正下方（樣式隔離、不依賴宿主 CSS）。站內導航切換商品時拆掉舊卡片重跑，由 `content.tsx` 統一驅動（見上方〈開關〉）；另有 sentinel + observer 守住被框架 re-render 洗掉時重新注入。
 3. **串流摘要**（[`src/lib/productSummary.ts`](../src/lib/productSummary.ts)）：用 `LanguageModel.create()` 建 session，`session.promptStreaming(指示 + 內文)` 串流輸出「一段話」（繁中、2～3 句、不條列、不用 Markdown、聚焦「這是什麼 + 適合哪種旅客」）。語氣沿用 popup 設定，但用商品摘要專屬的一組語氣描述（`PRODUCT_TONES`，針對「一段話」情境調整）。收到第一塊前顯示 skeleton。
 4. **快取**（[`src/lib/productSummaryCache.ts`](../src/lib/productSummaryCache.ts)）：以「商品 id + 語氣」為 key 存 `chrome.storage.local`，TTL 24 小時（商品說明變動少）。
 

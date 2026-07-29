@@ -14,6 +14,7 @@
 
 import { toolsForCurrentPage } from './lib/webmcpTools'
 import { onRouteChange } from './lib/productPage'
+import { isScopeActive, onScopeChange } from './lib/scopeSignal'
 import type { ModelContext } from './webmcp/modelContext'
 
 const LOG = '[summarize-ai/webmcp]'
@@ -38,11 +39,14 @@ async function register(): Promise<void> {
   if (!mc) return
 
   controller?.abort() // 換頁：先把上一頁的 tool 全部拔掉
+  controller = null
+
+  // 小夥伴的總開關 / 逐頁停用也管 tool：關掉就一支都不註冊（上一行已把舊的拔掉）。
+  // 狀態由 ISOLATED world 的 content.js 公布，這裡讀不到 chrome.storage，見 lib/scopeSignal.ts。
+  if (!isScopeActive()) return
+
   const tools = toolsForCurrentPage()
-  if (!tools.length) {
-    controller = null
-    return
-  }
+  if (!tools.length) return
 
   controller = new AbortController()
   const { signal } = controller
@@ -80,6 +84,10 @@ export function startWebMcp(): void {
   void register()
   // Nuxt SPA 站內導航不整頁重載 → 路由變了要重新決定該註冊哪些 tool
   onRouteChange(() => void register())
+  // 開關變化（popup 切總開關 / 這頁停用，以及 content.js 首次公布狀態）→ 跟著註冊或註銷。
+  // 首次公布通常晚於這裡：content.js 要先非同步讀 chrome.storage，所以上面那次 register()
+  // 多半會因為 isScopeActive() 還是 false 而不註冊，真正的註冊由這個訂閱補上。
+  onScopeChange(() => void register())
 }
 
 startWebMcp()

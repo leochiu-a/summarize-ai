@@ -32,6 +32,8 @@
     chrome.runtime = { getURL: (p) => p };
     window.Summarizer = { availability: async () => 'available', create: async () => ({ summarizeStreaming: () => ({ [Symbol.asyncIterator]() { return { next: () => Promise.resolve({ done: true }) }; } }), destroy() {} }) };
   </script>
+  <!-- 開關（總開關 / 逐頁停用）存在 chrome.storage，demo 要 stub 才試得到；必須在 content.js 之前 -->
+  <script src="/stub-storage.js"></script>
   <script src="/content.js"></script>
 </body>
 </html>

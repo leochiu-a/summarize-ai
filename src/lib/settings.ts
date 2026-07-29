@@ -1,10 +1,14 @@
-// 使用者設定：語氣、摘要類型、是否每頁自動摘要。
+// 使用者設定：總開關、逐頁停用清單、語氣、摘要類型。
 // 存 chrome.storage.local（跨分頁 / 重新整理），測試 / demo 無 API 時退回記憶體。
 
 export type ToneId = 'humorous' | 'serious' | 'gentle' | 'passionate' | 'cynical' | 'literary'
 export type SummaryTypeId = 'key-points' | 'tldr' | 'teaser' | 'headline'
 
 export interface Settings {
+  // 總開關：關閉時 content script 什麼都不注入（見 pageScope.ts / content.tsx）
+  enabled: boolean
+  // 逐頁停用清單，每筆是 pageKeyFromUrl() 正規化後的 page key（見 pageScope.ts）
+  disabledPages: string[]
   tone: ToneId
   summaryType: SummaryTypeId
 }
@@ -28,6 +32,8 @@ export const SUMMARY_TYPES: { id: SummaryTypeId; label: string; hint: string }[]
 ]
 
 export const DEFAULT_SETTINGS: Settings = {
+  enabled: true,
+  disabledPages: [],
   tone: 'humorous',
   summaryType: 'key-points',
 }
@@ -36,8 +42,25 @@ const STORAGE_KEY = 'settings'
 
 // 同步的記憶體真相來源：saveSettings 直接 merge 在這上面，避免多次快速寫入互相覆蓋。
 // storage.onChanged 監聽讓 current 在跨 context（popup 寫、content 讀）時保持新鮮。
-let current: Settings = { ...DEFAULT_SETTINGS }
+let current: Settings = { ...DEFAULT_SETTINGS, disabledPages: [] }
 let loaded = false
+
+// 對外一律回複本。disabledPages 是陣列，淺拷貝會把快取裡那顆陣列的參照交出去 ——
+// 呼叫端一個 push 就改到真相來源（而且不會觸發 storage 寫入，狀態就分岔了）。
+function cloneSettings(s: Settings): Settings {
+  return { ...s, disabledPages: [...s.disabledPages] }
+}
+
+// 補上預設值並把 storage 讀回來的內容當成不可信輸入處理（可能是舊版格式、或使用者手動改過）。
+// content script 的注入判斷吃這份結果，這裡壞掉整個 extension 就掛了，所以逐欄位收斂型別。
+function mergeSettings(stored: Partial<Settings> | undefined): Settings {
+  const merged = { ...DEFAULT_SETTINGS, ...stored }
+  merged.enabled = merged.enabled !== false // undefined / 壞值一律視為開啟
+  merged.disabledPages = Array.isArray(merged.disabledPages)
+    ? merged.disabledPages.filter((p) => typeof p === 'string')
+    : []
+  return merged
+}
 
 function localStore(): chrome.storage.LocalStorageArea | null {
   return typeof chrome !== 'undefined' && chrome.storage?.local ? chrome.storage.local : null
@@ -47,7 +70,7 @@ function localStore(): chrome.storage.LocalStorageArea | null {
 if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[STORAGE_KEY]) {
-      current = { ...DEFAULT_SETTINGS, ...(changes[STORAGE_KEY].newValue as Partial<Settings>) }
+      current = mergeSettings(changes[STORAGE_KEY].newValue as Partial<Settings>)
       loaded = true
     }
   })
@@ -58,19 +81,28 @@ export async function getSettings(): Promise<Settings> {
     const store = localStore()
     if (store) {
       const res = await store.get(STORAGE_KEY)
-      current = { ...DEFAULT_SETTINGS, ...(res[STORAGE_KEY] as Partial<Settings> | undefined) }
+      current = mergeSettings(res[STORAGE_KEY] as Partial<Settings> | undefined)
     }
     loaded = true
   }
-  return { ...current }
+  return cloneSettings(current)
+}
+
+/**
+ * 同步讀取設定快取，給 content script 在「建立 UI 之前」就能判斷開關（零閃現）。
+ * 冷啟動（還沒 getSettings 過）回預設值，所以進入點要先 await 一次 getSettings 補水。
+ */
+export function getSettingsSync(): Settings {
+  return cloneSettings(current)
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
   if (!loaded) await getSettings() // 確保 current 已從 storage 補水
-  current = { ...current, ...patch } // 同步 merge，杜絕並發覆蓋
+  // 同步 merge，杜絕並發覆蓋；cloneSettings 讓快取不去參照呼叫端傳進來的陣列
+  current = cloneSettings({ ...current, ...patch })
   const store = localStore()
   if (store) await store.set({ [STORAGE_KEY]: current })
-  return { ...current }
+  return cloneSettings(current)
 }
 
 // 訂閱設定變更（popup 存檔後，其他頁面即時同步）
@@ -79,7 +111,7 @@ export function onSettingsChanged(cb: (settings: Settings) => void): () => void 
   if (!store || !chrome.storage?.onChanged) return () => {}
   const handler = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
     if (area === 'local' && changes[STORAGE_KEY]) {
-      cb({ ...DEFAULT_SETTINGS, ...(changes[STORAGE_KEY].newValue as Partial<Settings>) })
+      cb(mergeSettings(changes[STORAGE_KEY].newValue as Partial<Settings>))
     }
   }
   chrome.storage.onChanged.addListener(handler)
@@ -88,7 +120,7 @@ export function onSettingsChanged(cb: (settings: Settings) => void): () => void 
 
 // 測試用：重設記憶體真相來源
 export function resetSettingsCache(): void {
-  current = { ...DEFAULT_SETTINGS }
+  current = cloneSettings(DEFAULT_SETTINGS)
   loaded = false
 }
 

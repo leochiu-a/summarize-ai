@@ -4,6 +4,7 @@
   "version": "1.1.0",
   "description": "kkday.com 專屬 pixel 小夥伴：用 Chrome 內建 AI 摘要頁面、生成商品重點、潤飾與翻譯評論、分析值不值得買（裝置端運算），並提供唯讀 WebMCP tool 供你的 AI agent 查詢",
   "permissions": ["storage"],
+  "host_permissions": ["*://kkday.com/*", "*://*.kkday.com/*"],
   "content_scripts": [
     {
       "matches": ["*://kkday.com/*", "*://*.kkday.com/*"],

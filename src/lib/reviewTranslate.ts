@@ -262,3 +262,13 @@ export function setTranslationsVisible(visible: boolean, root: ParentNode = docu
 export function hasInjectedTranslations(root: ParentNode = document): boolean {
   return root.querySelector(`[${TRANSLATION_NODE_ATTR}]`) !== null
 }
+
+// 把已注入的譯文與標記全部拆掉，讓評論區回到原本的樣子。
+// 譯文節點是就地插在 KKday 的 light DOM（非 Shadow DOM），小夥伴被關掉時得自己收回來，
+// 否則頁面上會留著我們的痕跡。
+export function removeInjectedTranslations(root: ParentNode = document): void {
+  for (const node of root.querySelectorAll(`[${TRANSLATION_NODE_ATTR}]`)) node.remove()
+  for (const el of root.querySelectorAll(`[${TRANSLATED_FLAG_ATTR}]`)) {
+    el.removeAttribute(TRANSLATED_FLAG_ATTR)
+  }
+}

@@ -280,6 +280,17 @@ function makeResponse(body, status) {
 }
 </script>
 
+<script>
+// webmcp.js 跑在 MAIN world，讀不到 chrome.storage，所以它的「小夥伴有沒有被關掉」是看
+// <html> 上的 data-summarize-ai 屬性 —— 真實環境由 ISOLATED world 的 content.js 公布
+// （見 src/lib/scopeSignal.ts）。這頁只載 webmcp.js、沒有 content.js，得自己補上這個屬性，
+// 否則 tool 會因為「沒人說可以」而全部不註冊（fail closed 是刻意的）。
+// 想試開關：在 console 移除屬性，tool 應該全部註銷；加回來應該重新註冊。
+//   document.documentElement.removeAttribute('data-summarize-ai')
+//   document.documentElement.setAttribute('data-summarize-ai', '')
+document.documentElement.setAttribute('data-summarize-ai', '')
+</script>
+
 <!-- 這支就是實際注入 kkday.com 的 build 產物（server 直接讀 dist/webmcp.js） -->
 <script src="/webmcp.js"></script>
 
