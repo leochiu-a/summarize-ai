@@ -25,7 +25,9 @@
   只用標籤與 role 判斷，不猜 class 名稱，避免誤殺真內容。
 - 內文截斷在 16000 字（Summarizer 輸入額度）。
 
-摘要串流在 [`src/hooks/useSummarizer.ts`](../src/hooks/useSummarizer.ts)：依設定的語氣與摘要類型呼叫 `Summarizer.summarizeStreaming()`，狀態機 `idle → thinking → speaking → done`。等待第一個 chunk 時輪播碎念台詞、嘴巴同步開合；收到內容後即時以 [snarkdown](https://github.com/developit/snarkdown) 渲染 markdown。標題列的 ⚡ 可強制重新摘要（略過快取）。
+摘要串流在 [`src/hooks/useSummarizer.ts`](../src/hooks/useSummarizer.ts)：依設定的語氣與摘要類型呼叫 `Summarizer.summarizeStreaming()`，狀態機 `idle → thinking → streaming → done`。等待第一個 chunk 時輪播碎念台詞、嘴巴同步開合；收到內容後即時以 [snarkdown](https://github.com/developit/snarkdown) 渲染 markdown。標題列的 ⚡ 可強制重新摘要（略過快取）。
+
+**兩段式觸發**：點頭像只展開泡泡、顯示邀請文字（`要我幫你把這頁的重點抓出來嗎？`）與一顆按鈕，同時在背景預熱模型（`prepare()`）；按下按鈕才真的摘要。只是好奇點一下不會白跑一次推論——細節見下方〈預熱與 session 生命週期〉。
 
 **快取**（[`src/lib/summaryCache.ts`](../src/lib/summaryCache.ts)）：同一網址半小時內重開直接用快取、跳過模型（顯示「快取」標記），依語氣 + 摘要類型分開存。存在 `chrome.storage.local`（跨分頁、跨重新整理），測試 / demo 無此 API 時退回記憶體。
 
@@ -37,10 +39,11 @@
 
 1. **偵測與定位**（[`src/lib/productPage.ts`](../src/lib/productPage.ts)）：`isProductPage()` 認出商品頁；`findDescSection()` 以 `#product-info-sec` 為主、退回用「商品說明」標題文字反查外框（不綁 Vue `data-v-*` / 樣式 class，避免改版誤傷）；`extractDescText()` 抽出去掉標題與雜訊的內文（截斷 6000 字）。
 2. **等待與注入**：KKday 是 Nuxt SPA，`waitForDescSection()` 用 `MutationObserver` 等區塊 render 完成，才把獨立 Shadow DOM host 插在「商品說明」標題正下方（樣式隔離、不依賴宿主 CSS）。`onRouteChange()` patch `history` API，站內導航切換商品時拆掉舊卡片重跑；另有 sentinel + observer 守住被框架 re-render 洗掉時重新注入。
-3. **串流摘要**（[`src/lib/productSummary.ts`](../src/lib/productSummary.ts)）：用 `LanguageModel.create()` 建 session，`session.promptStreaming(指示 + 內文)` 串流輸出「一段話」（繁中、2～3 句、不條列、不用 Markdown、聚焦「這是什麼 + 適合哪種旅客」）。語氣沿用 popup 設定，但用商品摘要專屬的一組語氣描述（`PRODUCT_TONES`，針對「一段話」情境調整）。收到第一塊前顯示 skeleton。
-4. **快取**（[`src/lib/productSummaryCache.ts`](../src/lib/productSummaryCache.ts)）：以「商品 id + 語氣」為 key 存 `chrome.storage.local`，TTL 24 小時（商品說明變動少）。
+3. **等使用者按下按鈕**：卡片掛載時**不產生摘要**，只做 `prepare()`——有快取就直接顯示上次結果，沒快取則背景預熱模型、停在 idle 顯示邀請與「產生 AI 摘要」按鈕。逛過去不看卡片的人不會被跑掉一次推論（見下方〈預熱與 session 生命週期〉）。
+4. **串流摘要**（[`src/lib/productSummary.ts`](../src/lib/productSummary.ts)）：規則（繁中、2～3 句、不條列、不用 Markdown、聚焦「這是什麼 + 適合哪種旅客」）在 `create()` 時以 system message 送出，`session.promptStreaming(商品說明內文)` 串流輸出「一段話」。語氣沿用 popup 設定，但用商品摘要專屬的一組語氣描述（`PRODUCT_TONES`，針對「一段話」情境調整）。收到第一塊前顯示 skeleton。
+5. **快取**（[`src/lib/productSummaryCache.ts`](../src/lib/productSummaryCache.ts)）：以「商品 id + 語氣」為 key 存 `chrome.storage.local`，TTL 24 小時（商品說明變動少）。
 
-狀態機在 [`src/hooks/useProductSummary.ts`](../src/hooks/useProductSummary.ts)（`idle → checking →`（需要時）`needs-activation → generating → done / error`），UI 在 [`src/components/ProductSummaryCard.tsx`](../src/components/ProductSummaryCard.tsx)，樣式對齊原生 `.ai-summary`。
+狀態機在 [`src/hooks/useProductSummary.ts`](../src/hooks/useProductSummary.ts)（`idle → checking → generating → done / error`），UI 在 [`src/components/ProductSummaryCard.tsx`](../src/components/ProductSummaryCard.tsx)，樣式對齊原生 `.ai-summary`。
 
 > **Prompt API 語言限制**：`expectedInputs` / `expectedOutputs` 只支援 `[de, en, es, fr, ja]`，指定 `zh-Hant` 會被拒。因此不宣告語言、改由指示要求繁中輸出（品質不保證，屬 API 未正式支援的語言）。
 
@@ -50,8 +53,28 @@
 
 商品頁右下角 buddy 的模式之一，程式在 [`src/hooks/useWorthIt.ts`](../src/hooks/useWorthIt.ts) 與 [`src/components/WorthBuddy.tsx`](../src/components/WorthBuddy.tsx)。
 
-- 事實由 [`src/lib/productFacts.ts`](../src/lib/productFacts.ts) 從 JSON-LD + DOM 抽出（評分、價格、折扣券等），餵給 `LanguageModel` 串流生成「結論先行 + 短理由」的購買建議。
-- 使用者點頭像才判斷（需使用者手勢）；結果快取 24h（[`src/lib/worthItCache.ts`](../src/lib/worthItCache.ts)）。
+- 事實由 [`src/lib/productFacts.ts`](../src/lib/productFacts.ts) 從 JSON-LD + DOM 抽出（評分、價格、折扣券等），餵給 `LanguageModel` 串流生成「結論先行 + 短理由」的購買建議。規則與語氣在 `create()` 以 system message 送出，prompt 只帶事實。
+- **兩段式觸發**：點頭像只展開泡泡與邀請按鈕（並預熱模型），按下「幫我看值不值得」才判斷；有快取則展開時直接顯示。結果快取 24h（[`src/lib/worthItCache.ts`](../src/lib/worthItCache.ts)）。
+
+---
+
+## 預熱與 session 生命週期
+
+三個用 Gemini Nano 的功能（頁面摘要、商品摘要卡片、值不值得買）都改成「**打開只展開 + 背景預熱 → 按鈕才推論**」。動機是 [Chrome 內建 AI Do's and Don'ts](https://developer.chrome.com/docs/ai/built-in-ai-dos-donts)：
+
+- 〈Prepare the model at a reasonable time〉：在「使用者意圖已明確」的時刻（展開泡泡、卡片出現在眼前）就先 `create()`，把 cold start 藏在他讀邀請文字的那幾秒；不要等按下「開始」才建。
+- 〈Set initial prompts during creation〉：規則類指示（結論先行、繁中、不得杜撰、語氣）改在 `create({ initialPrompts: [{ role: 'system', ... }] })` 送出，預熱時就處理完；真正的 prompt 只帶資料（商品事實 / 商品說明內文）。
+- 〈Clone sessions for repetitive tasks〉：預熱建的是 **baseline session**，每次執行 `clone()` 一份來問，baseline 保持乾淨不累積歷史；用完只 destroy clone。
+- 〈Destroy unused sessions〉：泡泡收合 / 卡片拆掉 / 卡片產生完就 `release()`。
+
+實作：
+
+- [`src/lib/warmSession.ts`](../src/lib/warmSession.ts) 是共用容器 `createWarmSlot(create)`，提供 `warm(key)`（冪等、in-flight 去重）/ `take(key)`（命中預熱＝零等待）/ `release()`。`key` 不同（使用者改了語氣或摘要類型）會自動收掉舊的重建。
+- 各 lib 各持有**自己的 slot**（`summarizer.ts` / `worthIt.ts` / `productSummary.ts`）：商品摘要卡片與「值不值得買」都用 `LanguageModel` 且跑在同一個 content script context，共用一個 slot 會互相把對方的 session 收掉。
+- 各 hook 對外只多一支 `prepare()`：**有快取直接把上次結果放出來（不跑模型也不預熱），沒快取才背景預熱**。預熱失敗一律吞掉不冒錯誤 UI——它是機會財，真正的錯誤留給執行時那條路徑。
+- 使用者手勢：buddy 的預熱發生在點頭像的手勢裡；卡片的預熱雖然沒有手勢，但卡片只在 gate 已 `available` 時才注入，`create()` 不會觸發模型下載。
+
+> 測試注意：slot 是模組級狀態，測試的 `afterEach` 要呼叫對應的 `release*()`，否則下一個測試會沿用上一個 stub 建出來的 session。
 
 ---
 

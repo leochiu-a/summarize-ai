@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ProductSummaryCard } from './ProductSummaryCard'
 import { resetSettingsCache } from '../lib/settings'
-import { clearProductSummaryCache } from '../lib/productSummaryCache'
+import { releaseProductSummary } from '../lib/productSummary'
+import {
+  clearProductSummaryCache,
+  setCachedProductSummary,
+} from '../lib/productSummaryCache'
 
 const DESC =
   '通行證涵蓋多處必訪景點，包括甘川洞文化村、札嘎其市場、海雲台、廣安大橋，讓你深入探索釜山的文化與現代魅力，並享有多處景點與商店的專屬折扣與入場優惠，省錢又盡興。'
@@ -20,27 +24,35 @@ function seedDescSection() {
 // LanguageModel stub：promptStreaming 分兩塊吐出固定文字，並記錄 create 次數
 const MODEL_OUTPUT = '釜山通行證：一票暢遊多個景點，享折扣與交通優惠。'
 function stubLanguageModel(availability: Availability = 'available') {
-  const calls = { create: 0 }
+  const calls = { create: 0, prompt: 0 }
   vi.stubGlobal('LanguageModel', {
     availability: async () => availability,
     create: async () => {
       calls.create += 1
-      return {
-        promptStreaming: () => ({
-          async *[Symbol.asyncIterator]() {
-            yield MODEL_OUTPUT.slice(0, 6)
-            yield MODEL_OUTPUT.slice(6)
-          },
-        }),
+      const session: Record<string, unknown> = {
+        promptStreaming: () => {
+          calls.prompt += 1
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield MODEL_OUTPUT.slice(0, 6)
+              yield MODEL_OUTPUT.slice(6)
+            },
+          }
+        },
+        clone: async () => session,
         destroy: () => {},
       }
+      return session
     },
   })
   return calls
 }
 
+const activateBtn = () => screen.getByRole('button', { name: '產生 AI 摘要' })
+
 afterEach(async () => {
   cleanup()
+  releaseProductSummary() // 預熱的 session 是模組級的，測試間要收掉
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
   resetSettingsCache()
@@ -48,12 +60,45 @@ afterEach(async () => {
 })
 
 describe('ProductSummaryCard', () => {
-  it('掛載後自動產生並顯示模型輸出', async () => {
+  it('掛載只顯示按鈕、不推論；按下按鈕才產生摘要', async () => {
     seedDescSection()
-    stubLanguageModel()
+    const calls = stubLanguageModel()
     render(<ProductSummaryCard />)
 
+    // 掛載：出現邀請與按鈕，模型沒有被問過（只在背景預熱）
+    await waitFor(() => expect(activateBtn()).toBeTruthy())
+    expect(calls.prompt).toBe(0)
+    expect(screen.queryByText(MODEL_OUTPUT)).toBeNull()
+
+    fireEvent.click(activateBtn())
+
     await waitFor(() => expect(screen.getByText(MODEL_OUTPUT)).toBeTruthy())
+    expect(calls.prompt).toBe(1)
+  })
+
+  it('掛載時預先載入模型（create 過但還沒提問）', async () => {
+    seedDescSection()
+    const calls = stubLanguageModel()
+    render(<ProductSummaryCard />)
+
+    await waitFor(() => expect(calls.create).toBe(1)) // 預熱：session 已建好
+    expect(calls.prompt).toBe(0) // 但還沒推論
+    expect(activateBtn()).toBeTruthy()
+  })
+
+  it('已有快取 → 掛載直接顯示上次結果，不出現按鈕、也不預熱', async () => {
+    seedDescSection()
+    window.history.replaceState({}, '', '/zh-tw/product/12319')
+    await setCachedProductSummary('12319', 'humorous', '快取的商品摘要')
+    const calls = stubLanguageModel()
+
+    render(<ProductSummaryCard />)
+
+    await waitFor(() => expect(screen.getByText('快取的商品摘要')).toBeTruthy())
+    expect(screen.queryByRole('button', { name: '產生 AI 摘要' })).toBeNull()
+    expect(screen.getByText('快取')).toBeTruthy()
+    expect(calls.create).toBe(0) // 有快取就不用載模型
+    window.history.replaceState({}, '', '/')
   })
 
   it('生成過程出錯（create throw）時顯示錯誤', async () => {
@@ -67,21 +112,8 @@ describe('ProductSummaryCard', () => {
       },
     })
     render(<ProductSummaryCard />)
+    fireEvent.click(activateBtn())
 
     await waitFor(() => expect(screen.getByText(/摘要失敗/)).toBeTruthy())
-  })
-
-  // 「模型未下載就先問同意」的把關已移到注入層（productPageSummary 的 gate）：
-  // downloadable 時卡片根本不會被注入。所以卡片本身的契約是「被 render＝gate 已通過」，
-  // 掛載即以 userInitiated 直接產生（不再自己顯示 needs-activation 按鈕）。
-  it('卡片被 render 即代表 gate 已放行，掛載即直接產生（不需再點按鈕）', async () => {
-    seedDescSection()
-    const calls = stubLanguageModel('available')
-    render(<ProductSummaryCard />)
-
-    await waitFor(() => expect(screen.getByText(MODEL_OUTPUT)).toBeTruthy())
-    expect(calls.create).toBe(1)
-    // 不再出現「點我產生」按鈕（那道把關已移到注入層）
-    expect(screen.queryByText(/點我產生商品重點摘要/)).toBeNull()
   })
 })

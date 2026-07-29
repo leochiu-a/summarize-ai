@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useProductSummary } from '../hooks/useProductSummary'
+import { EmojiIcon } from './EmojiIcon'
 
 // sparkle icon（對齊 KKday 原生 AI 摘要框的火花圖示風格）
 function SparkleIcon() {
@@ -10,15 +11,22 @@ function SparkleIcon() {
   )
 }
 
-// 自動摘要商品說明，串流顯示成一段話。
+// 把商品說明摘成一段話，串流顯示。
+//
+// 掛載時不直接產生摘要，只做 prepare()：有快取就直接顯示上次結果，沒快取則在背景把模型載起來
+// 並停在 idle 等使用者按「產生 AI 摘要」。理由有兩個——逛過去不看卡片的人不該被跑掉一次推論；
+// 而按下按鈕時 cold start 已經被預熱吃掉（Chrome 官方建議〈Prepare the model at a reasonable
+// time〉：意圖明確時就先 create，不要等按下 Generate）。
+//
 // 這張卡片只在 Gemini Nano 已就緒時才被注入層建立（見 productPageSummary.ts 的 gate），
-// 所以掛載即 run 是安全的——模型已就緒，可用性把關已在注入層完成。
+// 所以掛載就預熱是安全的——不會觸發模型下載，不需要使用者手勢。
 export function ProductSummaryCard() {
-  const { phase, data, error, fromCache, run } = useProductSummary()
+  const { phase, data, error, fromCache, prepare, run, release } = useProductSummary()
 
   useEffect(() => {
-    run()
-  }, [run])
+    void prepare()
+    return release // 卡片被拆掉（SPA 換頁）時收掉預熱的 session
+  }, [prepare, release])
 
   return (
     <div className="ps-card">
@@ -27,6 +35,17 @@ export function ProductSummaryCard() {
         <span className="ps-title">AI 商品重點摘要</span>
         {fromCache && <span className="ps-badge">快取</span>}
       </div>
+
+      {/* 還沒開始：邀請 + 按鈕（模型已在背景預熱，按下去就開始串流） */}
+      {phase === 'idle' && (
+        <div className="ps-idle">
+          <p className="ps-raw">想快速看懂這個商品嗎？我用一段話幫你抓重點。</p>
+          <button type="button" className="ps-activate" onClick={() => void run()}>
+            <EmojiIcon code="2728" />
+            產生 AI 摘要
+          </button>
+        </div>
+      )}
 
       {/* 還沒收到任何內容時才顯示 skeleton（檢查中，或生成中但第一塊還沒到） */}
       {(phase === 'checking' || (phase === 'generating' && !data)) && (

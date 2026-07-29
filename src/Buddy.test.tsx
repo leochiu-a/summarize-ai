@@ -3,7 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Buddy } from './Buddy'
 import { resetGateForTest, setGateAvailabilityForTest } from './lib/modelGate'
 import { resetSettingsCache, saveSettings } from './lib/settings'
+import { releaseSummarizer } from './lib/summarizer'
 import { clearSummaryCache } from './lib/summaryCache'
+import { releaseWorthIt } from './lib/worthIt'
 import { clearWorthItCache } from './lib/worthItCache'
 
 // 用一段夠長的文章塞進頁面，讓 extractContent 抽得到內容（需超過長度門檻）
@@ -16,15 +18,19 @@ function seedArticle() {
   document.body.insertAdjacentHTML('afterbegin', `<article><h1>測試文章</h1>${paras}</article>`)
 }
 
-// 建立可控的 Summarizer stub：streamFactory 決定串流吐出什麼，並記錄呼叫次數
+// 建立可控的 Summarizer stub：streamFactory 決定串流吐出什麼，並記錄呼叫次數。
+// create = 建立實例（預熱也算），summarize = 真的送去推論。
 function stubSummarizer(streamFactory: () => AsyncIterable<string>) {
-  const calls = { create: 0 }
+  const calls = { create: 0, summarize: 0 }
   vi.stubGlobal('Summarizer', {
     availability: async () => 'available',
     create: async () => {
       calls.create += 1
       return {
-        summarizeStreaming: () => streamFactory(),
+        summarizeStreaming: () => {
+          calls.summarize += 1
+          return streamFactory()
+        },
         destroy: () => {},
       }
     },
@@ -48,14 +54,37 @@ function chunkStream(chunks: string[]): () => AsyncIterable<string> {
 const avatar = () => screen.getByRole('button', { name: 'Buddy AI' })
 const productAvatar = avatar
 
-// 建立可控的 LanguageModel stub（值不值得買用 Prompt API）
+// 泡泡裡的 CTA：現在點頭像只展開泡泡 + 預熱模型，要再按這顆按鈕才真的跑
+const summaryCta = () => screen.getByRole('button', { name: '幫我摘要這頁' })
+const worthCta = () => screen.getByRole('button', { name: '幫我看值不值得' })
+
+// 兩段式觸發的完整動作：點頭像展開 → 按 CTA 開始
+async function startSummary() {
+  fireEvent.click(avatar())
+  fireEvent.click(await screen.findByRole('button', { name: '幫我摘要這頁' }))
+}
+async function startWorth() {
+  fireEvent.click(productAvatar())
+  fireEvent.click(await screen.findByRole('button', { name: '幫我看值不值得' }))
+}
+
+// 建立可控的 LanguageModel stub（值不值得買用 Prompt API）。
+// create = 建立 baseline session（預熱也算），prompt = 真的送去推論。
 function stubLanguageModel(streamFactory: () => AsyncIterable<string>) {
-  const calls = { create: 0 }
+  const calls = { create: 0, prompt: 0 }
   vi.stubGlobal('LanguageModel', {
     availability: async () => 'available',
     create: async () => {
       calls.create += 1
-      return { promptStreaming: () => streamFactory(), destroy: () => {} }
+      const session: Record<string, unknown> = {
+        promptStreaming: () => {
+          calls.prompt += 1
+          return streamFactory()
+        },
+        clone: async () => session,
+        destroy: () => {},
+      }
+      return session
     },
   })
   return calls
@@ -84,6 +113,9 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup()
   resetGateForTest()
+  // 預熱的 session 是模組級的，測試間要收掉，否則下一個測試會沿用上一個 stub 建的實例
+  releaseSummarizer()
+  releaseWorthIt()
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
   document.head.querySelectorAll('script[type="application/ld+json"]').forEach((s) => s.remove())
@@ -94,12 +126,12 @@ afterEach(async () => {
 })
 
 describe('Buddy 狀態機', () => {
-  it('點頭像後進入思考狀態，顯示碎念台詞', async () => {
+  it('按下「幫我摘要這頁」後進入思考狀態，顯示碎念台詞', async () => {
     seedArticle()
     stubSummarizer(pendingStream)
     render(<Buddy />)
 
-    fireEvent.click(avatar())
+    await startSummary()
 
     await waitFor(() => expect(screen.getByText('讓我看看這頁在講什麼')).toBeTruthy())
   })
@@ -109,7 +141,7 @@ describe('Buddy 狀態機', () => {
     stubSummarizer(pendingStream)
     render(<Buddy />)
 
-    fireEvent.click(avatar())
+    await startSummary()
     await waitFor(() => expect(screen.getByText('讓我看看這頁在講什麼')).toBeTruthy())
 
     // 催第一次
@@ -127,7 +159,7 @@ describe('Buddy 狀態機', () => {
     stubSummarizer(chunkStream(['**重點**：', '台灣自由行攻略']))
     render(<Buddy />)
 
-    fireEvent.click(avatar())
+    await startSummary()
 
     // done 才會出現反應 emoji（用其中一顆的 aria-label 判斷）
     const thumb = await screen.findByRole('button', { name: '讚' })
@@ -142,7 +174,7 @@ describe('Buddy emoji 反應', () => {
     seedArticle()
     stubSummarizer(chunkStream(['摘要內容']))
     render(<Buddy />)
-    fireEvent.click(avatar())
+    await startSummary()
     await screen.findByRole('button', { name: '讚' })
   }
 
@@ -168,79 +200,86 @@ describe('Buddy 整頁摘要的 Summarizer availability', () => {
   // 可控 availability 的 Summarizer stub（模型就緒把關由 consent gate 負責，但 Summarizer 帶
   // outputLanguage 可能需語言 adapter，故 useSummarizer 仍自己擋 unavailable）
   function stubSummarizerWith(availability: string, streamFactory: () => AsyncIterable<string>) {
-    const calls = { create: 0 }
+    const calls = { create: 0, summarize: 0 }
     vi.stubGlobal('Summarizer', {
       availability: async () => availability,
       create: async () => {
         calls.create += 1
-        return { summarizeStreaming: () => streamFactory(), destroy: () => {} }
+        return {
+          summarizeStreaming: () => {
+            calls.summarize += 1
+            return streamFactory()
+          },
+          destroy: () => {},
+        }
       },
     })
     return calls
   }
 
-  it('Summarizer unavailable（裝置不支援）→ 報錯，不 create', async () => {
+  it('Summarizer unavailable（裝置不支援）→ 報錯，不摘要', async () => {
     seedArticle()
     const calls = stubSummarizerWith('unavailable', chunkStream(['內容']))
     render(<Buddy />)
 
-    fireEvent.click(avatar())
+    await startSummary()
     await waitFor(() => expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy())
-    expect(calls.create).toBe(0)
+    expect(calls.summarize).toBe(0)
   })
 
-  it('downloadable（語言 adapter 待補）→ 不擋，直接 create 產生（gate 已同意過下載）', async () => {
+  it('downloadable（語言 adapter 待補）→ 不擋，直接產生（gate 已同意過下載）', async () => {
     seedArticle()
     const calls = stubSummarizerWith('downloadable', chunkStream(['台灣自由行攻略']))
     render(<Buddy />)
 
-    fireEvent.click(avatar())
+    await startSummary()
     await waitFor(() => expect(screen.getByText(/台灣自由行攻略/)).toBeTruthy())
-    expect(calls.create).toBe(1)
+    expect(calls.summarize).toBe(1)
   })
 })
 
 describe('Buddy 快取', () => {
-  it('半小時內重開同一頁用快取，不再呼叫模型', async () => {
+  it('半小時內重開同一頁直接顯示快取，不再呼叫模型、也不用按按鈕', async () => {
     seedArticle()
     const calls = stubSummarizer(chunkStream(['台灣自由行攻略']))
     render(<Buddy />)
 
     // 第一次：跑模型
-    fireEvent.click(avatar())
+    await startSummary()
     await screen.findByRole('button', { name: '讚' })
-    expect(calls.create).toBe(1)
+    expect(calls.summarize).toBe(1)
     expect(screen.queryByText('快取')).toBeNull()
 
-    // 收合再重開：命中快取，不再呼叫模型，且顯示「快取」標記
+    // 收合再重開：prepare 命中快取 → 直接顯示結果與「快取」標記，不用再按 CTA
     fireEvent.click(avatar()) // close
     fireEvent.click(avatar()) // reopen
     await screen.findByText('快取')
-    expect(calls.create).toBe(1)
+    expect(calls.summarize).toBe(1)
     expect(screen.getByText(/台灣自由行攻略/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '幫我摘要這頁' })).toBeNull()
   })
 
-  it('按重新摘要會略過快取、強制重跑', async () => {
+  it('按重做會略過快取、強制重跑', async () => {
     seedArticle()
     const calls = stubSummarizer(chunkStream(['重新摘要的內容']))
     render(<Buddy />)
 
-    fireEvent.click(avatar())
+    await startSummary()
     await screen.findByRole('button', { name: '讚' })
-    expect(calls.create).toBe(1)
+    expect(calls.summarize).toBe(1)
 
     fireEvent.click(screen.getByRole('button', { name: '重做' }))
-    await waitFor(() => expect(calls.create).toBe(2))
+    await waitFor(() => expect(calls.summarize).toBe(2))
   })
 })
 
 describe('Buddy 商品頁「值不值得買」', () => {
-  it('商品頁點頭像 → 用 Prompt API 給出值不值得買判斷，標題切換', async () => {
+  it('商品頁按下 CTA → 用 Prompt API 給出值不值得買判斷，標題切換', async () => {
     seedProductPage()
     stubLanguageModel(chunkStream(['值得下手，', '評分 4.83 又有免費取消']))
     render(<Buddy />)
 
-    fireEvent.click(productAvatar())
+    await startWorth()
 
     // 串流內容出現、標題為「值不值得買」（不是「頁面摘要」）
     await screen.findByText(/評分 4.83 又有免費取消/)
@@ -256,16 +295,16 @@ describe('Buddy 商品頁「值不值得買」', () => {
     const summ = stubSummarizer(chunkStream(['不該出現的整頁摘要']))
     render(<Buddy />)
 
-    fireEvent.click(productAvatar())
+    await startWorth()
     await screen.findByText(/可以考慮/)
 
-    expect(lm.create).toBe(1)
+    expect(lm.prompt).toBe(1)
     expect(summ.create).toBe(0) // 商品頁走 worth，不走整頁摘要
   })
 })
 
-describe('Buddy 進頁不自動觸發', () => {
-  it('載入後靜待使用者點頭像，不會自己跑摘要（無自動摘要功能）', async () => {
+describe('Buddy 兩段式觸發（打開只展開、按鈕才跑）', () => {
+  it('進頁靜待使用者，不會自己跑摘要', async () => {
     seedArticle()
     const calls = stubSummarizer(chunkStream(['不該出現']))
 
@@ -274,6 +313,61 @@ describe('Buddy 進頁不自動觸發', () => {
 
     expect(calls.create).toBe(0)
     expect(screen.queryByText(/不該出現/)).toBeNull()
+  })
+
+  it('點頭像只展開泡泡與邀請按鈕，不推論', async () => {
+    seedArticle()
+    const calls = stubSummarizer(chunkStream(['不該出現']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+
+    expect(await screen.findByRole('button', { name: '幫我摘要這頁' })).toBeTruthy()
+    expect(calls.summarize).toBe(0)
+    expect(screen.queryByText(/不該出現/)).toBeNull()
+  })
+
+  it('點頭像時預先載入模型（create 過但還沒摘要）', async () => {
+    seedArticle()
+    const calls = stubSummarizer(chunkStream(['不該出現']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+
+    await waitFor(() => expect(calls.create).toBe(1)) // 預熱
+    expect(calls.summarize).toBe(0)
+  })
+
+  it('商品頁點頭像只展開，按下 CTA 才判斷；預熱不推論', async () => {
+    seedProductPage()
+    const calls = stubLanguageModel(chunkStream(['可以考慮']))
+    render(<Buddy />)
+
+    fireEvent.click(productAvatar())
+
+    expect(await screen.findByRole('button', { name: '幫我看值不值得' })).toBeTruthy()
+    await waitFor(() => expect(calls.create).toBe(1)) // 預熱 baseline session
+    expect(calls.prompt).toBe(0)
+
+    fireEvent.click(worthCta())
+    await screen.findByText(/可以考慮/)
+    expect(calls.prompt).toBe(1)
+    expect(calls.create).toBe(1) // 沿用預熱好的 baseline，沒有重建
+  })
+
+  it('展開後再點頭像＝收合，回到只有頭像的狀態', async () => {
+    seedArticle()
+    stubSummarizer(chunkStream(['不該出現']))
+    render(<Buddy />)
+
+    fireEvent.click(avatar())
+    expect(await screen.findByRole('button', { name: '幫我摘要這頁' })).toBeTruthy()
+
+    fireEvent.click(avatar())
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '幫我摘要這頁' })).toBeNull(),
+    )
+    expect(screen.queryByText('頁面摘要')).toBeNull()
   })
 })
 

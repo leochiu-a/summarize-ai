@@ -1,6 +1,10 @@
 import { useCallback, useState } from 'react'
 import { extractDescText, findDescSection, getProductId } from '../lib/productPage'
-import { generateProductSummary } from '../lib/productSummary'
+import {
+  generateProductSummary,
+  prewarmProductSummary,
+  releaseProductSummary,
+} from '../lib/productSummary'
 import { getCachedProductSummary, setCachedProductSummary } from '../lib/productSummaryCache'
 import { getSettings } from '../lib/settings'
 
@@ -14,10 +18,15 @@ export interface ProductSummarizing {
   data: string | null // 摘要文字（串流時為累積到目前的內容）
   error: string
   fromCache: boolean
+  prepare: () => Promise<void>
   run: (opts?: { force?: boolean }) => Promise<void>
+  release: () => void
 }
 
-// 流程：擷取商品說明 → 查快取 →（未命中）Prompt API 串流輸出 → 寫快取。
+// 兩段式流程：
+// - prepare()：卡片出現時呼叫 → 有快取直接顯示，沒快取就背景預熱 session、停在 idle 等按鈕。
+// - run()：使用者按下「產生 AI 摘要」才真的跑。擷取商品說明 → 查快取 →
+//   （未命中）Prompt API 串流輸出 → 寫快取。
 // 模型可用性（含下載同意）已由注入層 gate 統一把關（gate 未就緒不注入這張卡片），
 // 這裡不再自己判 availability——卡片被掛載＝模型已就緒。
 export function useProductSummary(): ProductSummarizing {
@@ -25,6 +34,23 @@ export function useProductSummary(): ProductSummarizing {
   const [data, setData] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
+
+  // 卡片一出現就呼叫：有快取直接顯示（不跑模型也不預熱），沒快取才背景預熱 baseline session
+  // （Chrome 官方建議〈Prepare the model at a reasonable time〉）
+  const prepare = useCallback(async () => {
+    const { tone } = await getSettings()
+    const productId = getProductId() ?? location.pathname
+    const cached = await getCachedProductSummary(productId, tone)
+    if (cached) {
+      setData(cached)
+      setError('')
+      setFromCache(true)
+      setPhase('done')
+      return
+    }
+    // 預熱是機會財：失敗不冒錯誤 UI，真正的錯誤留給 run()
+    await prewarmProductSummary(tone).catch(() => {})
+  }, [])
 
   const run = useCallback(async ({ force = false } = {}) => {
     setError('')
@@ -70,8 +96,14 @@ export function useProductSummary(): ProductSummarizing {
     } catch (err) {
       setError(`摘要失敗：${err instanceof Error ? err.message : String(err)}`)
       setPhase('error')
+    } finally {
+      // 卡片沒有「重做」入口，跑完這一次就不會再用到 session，留著只是佔記憶體
+      releaseProductSummary()
     }
   }, [])
 
-  return { phase, data, error, fromCache, run }
+  // 卡片被拆掉（SPA 換頁）時釋放預熱中的 session
+  const release = useCallback(() => releaseProductSummary(), [])
+
+  return { phase, data, error, fromCache, prepare, run, release }
 }

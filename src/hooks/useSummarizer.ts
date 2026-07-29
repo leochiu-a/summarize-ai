@@ -1,7 +1,13 @@
 import { useCallback, useState } from 'react'
 import type { BuddyPhase } from '../lib/buddyPhase'
-import { extractContent, pickOutputLanguage } from '../lib/summarizer'
-import { getSettings, toneById } from '../lib/settings'
+import {
+  extractContent,
+  releaseSummarizer,
+  takeSummarizer,
+  warmSummarizer,
+  type SummarizerOptions,
+} from '../lib/summarizer'
+import { getSettings, toneById, type Settings } from '../lib/settings'
 import { getCachedSummary, setCachedSummary } from '../lib/summaryCache'
 
 export interface Summarizing {
@@ -9,24 +15,45 @@ export interface Summarizing {
   markdown: string
   error: string
   fromCache: boolean
+  prepare: () => Promise<void>
   summarize: (opts?: { force?: boolean }) => Promise<void>
   close: () => void
 }
 
-// 核心摘要流程：availability →（unavailable 報錯）→ 擷取內容 → 查快取 →（未命中）串流摘要 → 寫快取。
-// force=true 略過快取、強制重跑（重新摘要按鈕用）。
+// 兩段式流程：
+// - prepare()：使用者展開泡泡（意圖明確）→ 有快取直接給結果，沒快取就背景預熱 Summarizer。
+// - summarize()：使用者按下按鈕才真的跑。availability →（unavailable 報錯）→ 擷取內容 →
+//   查快取 →（未命中）串流摘要 → 寫快取。force=true 略過快取、強制重跑（重做按鈕用）。
 //
 // 為什麼這裡仍要判 availability，其他功能 hook 卻拿掉了：
 // consent gate 用 LanguageModel（Prompt API）當 base-model probe。Summarizer 雖共用同一顆
-// Gemini Nano，但這裡 create 帶了 outputLanguage（見下方），可能需要額外的語言 adapter——
-// availability 是 per-options 回報的，base model ready 不代表這組語言選項就緒。所以 Summarizer
-// 得自己確認。downloadable 時直接讓 create 去補 adapter（使用者已在 gate 同意過下載）；只有
-// unavailable（裝置不支援）才擋下報錯。
+// Gemini Nano，但 create 帶了 outputLanguage（見 lib/summarizer 的 createSummarizer），可能需要
+// 額外的語言 adapter——availability 是 per-options 回報的，base model ready 不代表這組語言選項
+// 就緒。所以 Summarizer 得自己確認。downloadable 時直接讓 create 去補 adapter（使用者已在 gate
+// 同意過下載）；只有 unavailable（裝置不支援）才擋下報錯。
 export function useSummarizer(): Summarizing {
   const [phase, setPhase] = useState<BuddyPhase>('idle')
   const [markdown, setMarkdown] = useState('')
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
+
+  // 使用者展開泡泡時呼叫（意圖明確、但還沒按下開始）：
+  // - 已有快取 → 直接把上次結果放出來，不跑模型也不用預熱
+  // - 沒快取 → 背景把 Summarizer 建起來，把 cold start 藏在他讀提示文字的那幾秒
+  //   （Chrome 官方建議〈Prepare the model at a reasonable time〉）
+  const prepare = useCallback(async () => {
+    const settings = await getSettings()
+    const cached = await getCachedSummary(variantOf(settings))
+    if (cached) {
+      setMarkdown(cached.markdown)
+      setError('')
+      setFromCache(true)
+      setPhase('done')
+      return
+    }
+    // 預熱是機會財：失敗不冒錯誤 UI，真正的錯誤留給 summarize()
+    await warmSummarizer(createOptions(settings)).catch(() => {})
+  }, [])
 
   const summarize = useCallback(async ({ force = false } = {}) => {
     setError('')
@@ -34,7 +61,6 @@ export function useSummarizer(): Summarizing {
     setFromCache(false)
     setPhase('thinking')
 
-    let summarizer: Summarizer | null = null
     try {
       // 裝置不支援 Summarizer（API 不存在或 unavailable）→ 報錯。downloadable/downloading 不擋，
       // 讓 create 去補語言 adapter（base model 已由 gate 下載，這裡只差語言資料）。
@@ -56,7 +82,7 @@ export function useSummarizer(): Summarizing {
       // 依使用者設定決定摘要類型與語氣
       const settings = await getSettings()
       const tone = toneById(settings.tone)
-      const variant = `${settings.tone}:${settings.summaryType}`
+      const variant = variantOf(settings)
 
       // 半小時內同一頁（同語氣 / 類型）直接用快取
       if (!force) {
@@ -69,19 +95,8 @@ export function useSummarizer(): Summarizing {
         }
       }
 
-      const createOptions = {
-        type: settings.summaryType,
-        format: 'markdown' as const,
-        length: 'medium' as const,
-        sharedContext: tone.prompt,
-      }
-
-      // 部分語言可能不在支援清單，失敗時退回預設輸出語言
-      try {
-        summarizer = await Summarizer.create({ ...createOptions, outputLanguage: pickOutputLanguage() })
-      } catch {
-        summarizer = await Summarizer.create(createOptions)
-      }
+      // 命中 prepare() 的預熱＝零等待；沒預熱過（或設定改了）就在這裡現場建
+      const summarizer = await takeSummarizer(createOptions(settings))
 
       const stream = summarizer.summarizeStreaming(article.text, {
         context: `文章標題：「${article.title}」。這是網頁的內文，${tone.prompt}`,
@@ -105,9 +120,8 @@ export function useSummarizer(): Summarizing {
     } catch (err) {
       setError(`摘要失敗：${err instanceof Error ? err.message : String(err)}`)
       setPhase('error')
-    } finally {
-      summarizer?.destroy()
     }
+    // 不在這裡 destroy：實例歸 warm slot 管，留著給「重做」用，收合泡泡時才 release
   }, [])
 
   const close = useCallback(() => {
@@ -115,7 +129,21 @@ export function useSummarizer(): Summarizing {
     setMarkdown('')
     setError('')
     setFromCache(false)
+    releaseSummarizer() // 泡泡收合＝這份 session 沒人要了
   }, [])
 
-  return { phase, markdown, error, fromCache, summarize, close }
+  return { phase, markdown, error, fromCache, prepare, summarize, close }
+}
+
+// 快取 variant：語氣與摘要類型不同會各自快取
+const variantOf = (settings: Settings) => `${settings.tone}:${settings.summaryType}`
+
+// 依使用者設定組出 Summarizer 的 create 選項（預熱與實際摘要必須用同一組，才能命中同一份預熱）
+function createOptions(settings: Settings): SummarizerOptions {
+  return {
+    type: settings.summaryType,
+    format: 'markdown',
+    length: 'medium',
+    sharedContext: toneById(settings.tone).prompt,
+  }
 }

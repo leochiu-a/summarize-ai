@@ -173,6 +173,19 @@
 .buddy-btn.ghost:hover {
   background: #26243a11;
 }
+/* 按鈕上的 emoji（幫我摘要這頁 👀 / 幫我看值不值得 🧐）：比文字略大、hover 才播動畫 */
+.buddy-btn .emoji-static,
+.buddy-btn .emoji-anim {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+}
+.buddy-btn:hover .emoji-static {
+  display: none;
+}
+.buddy-btn:hover .emoji-anim {
+  display: block;
+}
 
 /* tooltip：Popover API（top layer）+ CSS anchor positioning，錨在按鈕上方 */
 .tooltip {

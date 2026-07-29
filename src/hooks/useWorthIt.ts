@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import type { BuddyPhase } from '../lib/buddyPhase'
 import { getProductId } from '../lib/productPage'
 import { readProductFacts } from '../lib/productFacts'
-import { generateWorthIt } from '../lib/worthIt'
+import { generateWorthIt, prewarmWorthIt, releaseWorthIt } from '../lib/worthIt'
 import { getCachedWorthIt, setCachedWorthIt } from '../lib/worthItCache'
 import { getSettings } from '../lib/settings'
 
@@ -11,17 +11,38 @@ export interface WorthIting {
   data: string | null // 判斷文字（串流時為累積到目前的內容）
   error: string
   fromCache: boolean
+  prepare: () => Promise<void>
   run: (opts?: { force?: boolean }) => Promise<void>
   reset: () => void
 }
 
-// 流程：讀商品事實（JSON-LD + DOM）→ 查快取 →（未命中）Prompt API 串流 → 寫快取。
+// 兩段式流程：
+// - prepare()：使用者展開泡泡（意圖明確）→ 有快取直接給結果，沒快取就背景預熱 session。
+// - run()：使用者按下按鈕才真的跑。讀商品事實（JSON-LD + DOM）→ 查快取 →
+//   （未命中）Prompt API 串流 → 寫快取。
 // 模型可用性（含下載同意）已由 consent gate 在外殼統一把關，這裡不再自己判 availability。
 export function useWorthIt(): WorthIting {
   const [phase, setPhase] = useState<BuddyPhase>('idle')
   const [data, setData] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
+
+  // 展開泡泡時：有快取直接給結果（不跑模型也不預熱），沒快取才背景預熱 baseline session
+  // （Chrome 官方建議〈Prepare the model at a reasonable time〉）
+  const prepare = useCallback(async () => {
+    const { tone } = await getSettings()
+    const productId = getProductId() ?? location.pathname
+    const cached = await getCachedWorthIt(productId, tone)
+    if (cached) {
+      setData(cached)
+      setError('')
+      setFromCache(true)
+      setPhase('done')
+      return
+    }
+    // 預熱是機會財：失敗不冒錯誤 UI，真正的錯誤留給 run()
+    await prewarmWorthIt(tone).catch(() => {})
+  }, [])
 
   const run = useCallback(async ({ force = false } = {}) => {
     setError('')
@@ -74,7 +95,8 @@ export function useWorthIt(): WorthIting {
     setData(null)
     setError('')
     setFromCache(false)
+    releaseWorthIt() // 泡泡收合＝這份 session 沒人要了
   }, [])
 
-  return { phase, data, error, fromCache, run, reset }
+  return { phase, data, error, fromCache, prepare, run, reset }
 }
