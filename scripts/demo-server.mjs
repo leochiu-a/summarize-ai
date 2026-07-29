@@ -36,6 +36,16 @@ function resolveFile(pathname) {
     return existsSync(built) ? built : null
   }
 
+  // extension 資產（sprite、emoji）：程式用 chrome.runtime.getURL('assets/…') 取，
+  // demo 沒有 extension runtime，getURL 退回相對路徑 → 直接給 dist 裡的同一份，
+  // 否則小夥伴的頭像與所有 emoji 在 demo 裡都是破圖。
+  if (pathname.startsWith('/assets/')) {
+    const dist = join(ROOT, 'dist')
+    const built = join(dist, normalize(pathname))
+    if (!built.startsWith(dist)) return null // 防目錄穿越
+    return existsSync(built) && statSync(built).isFile() ? built : null
+  }
+
   // 商品頁：真實網址是 /product/<id>（可帶 /zh-tw 前綴）。
   // WebMCP 的 tool 全靠 isProductPage() 決定要不要註冊，所以路徑形狀必須對。
   if (/^(\/[a-z]{2}-[a-z]{2})?\/product\/\d+(-[\w-]+)?\/?$/i.test(pathname)) {
