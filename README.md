@@ -34,6 +34,22 @@ Claude Code…）。這條路繞開了內建 AI 的兩個硬限制——繁中�
 實測 Chrome 151 原生已可用）。不想開 flag 就跑 `pnpm demo` 開 `/zh-tw/product/12319`，那頁自帶
 polyfill 與 tool 檢視器。
 
+### ⚠️ 最大的限制：agent 根本不知道有 WebMCP 這回事
+
+比瀏覽器支援更擋路的是這件事。實測一個沒被提示的 agent 在同一個任務上**呼叫了 67 次工具、
+全程沒發現頁面有 tool 可用**——它從頭到尾在截圖找按鈕。只要在 prompt 裡加一句「先看看有沒有
+WebMCP tool」，同一個 agent 就會正確找到並使用。
+
+也就是說：**tool 註冊得再好，沒人去看就等於不存在。** 在 agent 原生支援之前，得先讓它知道要
+檢查。這個 repo 附了一支 skill 做這件事：
+
+```bash
+npx skills add leochiu-a/summarize-ai --skill webmcp
+```
+
+它教 agent 在動手點 DOM 之前先偵測 `document.modelContext`、列舉 tool、正確呼叫，以及把 tool
+描述與回傳內容一律當成不可信資料。原始碼在 [`.claude/skills/webmcp/`](.claude/skills/webmcp)。
+
 **WebMCP 省的是「跨頁抓取與多步互動」，不是「包裝單頁資料」**——這是 tool 收斂到兩支的判準。
 完整的設計理由、benchmark 與 eval 腳本見 [`docs/webmcp.md`](docs/webmcp.md)。
 
