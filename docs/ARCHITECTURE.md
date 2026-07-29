@@ -132,14 +132,25 @@ Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**�
 
 ## Build
 
-`pnpm run build` 分三階段：
+MV3 需要三種不同形狀的產物，所以有三個 vite config、拆成三支 script：
 
-1. `vp build` 打包 content script（含 React runtime，輸出單一 IIFE `dist/content.js`）
-2. `vp build --config vite.popup.config.ts` 打包 popup（一般 extension 頁面，可用 ESM，輸出 `dist/popup.html` + JS/CSS）
-3. `vp build --config vite.webmcp.config.ts` 打包 WebMCP 註冊層（MAIN world，IIFE `dist/webmcp.js`，無 React、無 `chrome.*`）
+| script | 產出 | 為什麼要獨立 |
+| --- | --- | --- |
+| `build:content` | IIFE `dist/content.js`（含 React runtime） | content script 不能直接吃 ESM |
+| `build:popup` | `dist/popup.html` + JS/CSS | 一般 extension 頁面，可用 ESM |
+| `build:webmcp` | IIFE `dist/webmcp.js`（無 React、無 `chrome.*`） | 跑在 MAIN world，見上方〈WebMCP tool 層〉 |
 
-三個 build 都寫進同一個 `dist`，所以只有第一階段（非 watch 模式）會清空目錄，另外兩個一律
-`emptyOutDir: false`——否則誰跑第二次都會刪掉別人的產物。
+`pnpm run build` 用 [`npm-run-all2`](https://github.com/bcomnes/npm-run-all2) 的 `run-s` 依序跑這三支，
+`pnpm dev` 則是 `clean` 之後用 `run-p -l "build:* -- --watch"` 並行 watch（`-l` 會在每行輸出前面
+標上是哪一支在講話）。
+
+**順序是有意義的，不要改成 glob。** 三個 build 都寫進同一個 `dist`，只有 `build:content` 會清空
+目錄（`emptyOutDir: !isDev`），另外兩個一律 `emptyOutDir: false`——所以 content 必須第一個跑，
+否則它會把另外兩個的產物刪掉。watch 模式靠 `DEV_WATCH=1` 讓 content 也不清空，改由 `clean`
+在啟動前清一次。
+
+改用 `run-s` / `run-p` 而不是 shell 的 `&&` 與 `& wait`，是因為舊寫法 `sh -c 'a & b & wait'`
+**退出碼恆為 0**——任何一個 watch build 掛掉都不會有訊號。`run-p` 會如實傳出非零退出碼。
 
 UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾；popup 是獨立頁面，用一般 `<link>` / `<style>` 即可。
 

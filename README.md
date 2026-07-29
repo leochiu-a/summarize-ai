@@ -88,12 +88,16 @@ pnpm run build
 
 ```bash
 pnpm install
-pnpm run dev          # watch mode
+pnpm run dev          # 三個 bundle 並行 watch（輸出有前綴標示來源）
 pnpm run build        # 產出 dist/
 pnpm run typecheck    # tsc --noEmit
 pnpm test             # vitest（jsdom 環境）
 pnpm run test:watch   # vitest watch
 ```
+
+MV3 需要三種不同形狀的產物，所以 build 拆成 `build:content` / `build:popup` / `build:webmcp`
+三支（可單獨跑），由 `npm-run-all2` 的 `run-s` 串起來。順序有意義——細節見
+[ARCHITECTURE 的 Build](docs/ARCHITECTURE.md#build)。
 
 測試涵蓋內容擷取、快取 / TTL、設定 merge、各功能的狀態機（React Testing Library）與 stub 掉的 Chrome AI API。
 
