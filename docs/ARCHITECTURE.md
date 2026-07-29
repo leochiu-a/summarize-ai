@@ -2,7 +2,7 @@
 
 這份文件記錄各功能的實作細節與踩過的坑。使用說明請看 [README](../README.md)。
 
-擴充套件只在 `kkday.com`（含子網域）運作。所有推論都用 Chrome 內建 AI 在本機執行，內容不上傳。內建 AI 分兩組：
+擴充套件只在 `kkday.com`（含子網域）運作。下面〈WebMCP tool 層〉以外的所有功能，推論都用 Chrome 內建 AI 在本機執行、內容不上傳（WebMCP 那層不用內建 AI，推論在使用者自己帶來的 agent）。內建 AI 分兩組：
 
 - **A 組**（共用 Gemini Nano）：Summarizer / Prompt（`LanguageModel`）/ Rewriter — 頁面摘要、商品摘要卡片、評論潤飾、值不值得分析。其中 Rewriter 尚未進穩定版，評論潤飾會退回 Prompt API（見下方〈評論潤飾〉）。
 - **B 組**（獨立模型）：Translator / LanguageDetector — 翻譯所有評論。
@@ -98,12 +98,59 @@ Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**�
 
 ---
 
+## WebMCP tool 層（實驗性）
+
+跟上面所有功能相反的方向：前面每一項都是「我們自己在瀏覽器裡跑一個小模型」，這一層是
+**把頁面的能力開放給使用者自己帶來的 agent**（Gemini in Chrome、Claude in Chrome、
+透過 `chrome-devtools-mcp` 接進來的 Claude Code…）。它繞開了內建 AI 的兩個硬限制——繁體中文
+不在 Gemini Nano 支援語言內、mobile 完全不支援——因為推論不在我們這邊做，我們只負責提供
+結構化事實。
+
+程式在 [`src/webmcp.ts`](../src/webmcp.ts)（註冊層）與
+[`src/lib/webmcpTools.ts`](../src/lib/webmcpTools.ts)（tool 定義）。**只有兩支，而且都是唯讀**：
+`search_products`（全站）打 SRP 自己在用的搜尋 API；`check_package_availability`（商品頁）打
+可訂性 API，回逐方案可訂與否 + 剩餘數量。
+
+架構上要知道的三件事：
+
+- **它是第二支 content script，跑在 MAIN world。** `document.modelContext` 是 page world 的
+  物件，MV3 預設的 ISOLATED world 有自己一份 `document`，看不到它。代價是 MAIN world 拿不到
+  `chrome.*`，所以 `src/webmcp.ts` 只能 import 不碰 chrome API 的 lib 模組（`productPage` /
+  `packageAvailability` / `packageCalendar` / `productSearch`），不能用 `settings.ts` 與三個
+  cache 模組。build 後 `dist/webmcp.js` 裡不應出現任何 `chrome.` 參照。
+- **它是提案原型，不是上線路徑。** WebMCP 是給網站作者用的 API；這裡是用擴充套件在 kkday.com
+  上「代替網站」註冊 tool，目的是在動 Nuxt 之前先驗證 tool 的粒度、schema 與輸出大小對 agent
+  好不好用。正式做法是把同一組定義搬進 KKday 自己的前端。
+- **曾經有 7 支，benchmark 之後砍到 2 支。** 判準是：**WebMCP 省的是「跨頁抓取與多步互動」，
+  不是「包裝單頁資料」**——商品頁那 12,000 字本來就 100% SSR、一次在 DOM 裡，包成 tool 實測
+  反而更貴。剩下的兩支都不在包裝 DOM。
+
+完整的設計理由、benchmark 數據與 eval 腳本在 [`webmcp.md`](webmcp.md)；
+需要 KKday 前後端配合的事整理在 [`kkday-findings.md`](kkday-findings.md)。
+
+---
+
 ## Build
 
-`pnpm run build` 分兩階段：
+MV3 需要三種不同形狀的產物，所以有三個 vite config、拆成三支 script：
 
-1. `vp build` 打包 content script（含 React runtime，輸出單一 IIFE `dist/content.js`）
-2. `vp build --config vite.popup.config.ts` 打包 popup（一般 extension 頁面，可用 ESM，輸出 `dist/popup.html` + JS/CSS）
+| script | 產出 | 為什麼要獨立 |
+| --- | --- | --- |
+| `build:content` | IIFE `dist/content.js`（含 React runtime） | content script 不能直接吃 ESM |
+| `build:popup` | `dist/popup.html` + JS/CSS | 一般 extension 頁面，可用 ESM |
+| `build:webmcp` | IIFE `dist/webmcp.js`（無 React、無 `chrome.*`） | 跑在 MAIN world，見上方〈WebMCP tool 層〉 |
+
+`pnpm run build` 用 [`npm-run-all2`](https://github.com/bcomnes/npm-run-all2) 的 `run-s` 依序跑這三支，
+`pnpm dev` 則是 `clean` 之後用 `run-p -l "build:* -- --watch"` 並行 watch（`-l` 會在每行輸出前面
+標上是哪一支在講話）。
+
+**順序是有意義的，不要改成 glob。** 三個 build 都寫進同一個 `dist`，只有 `build:content` 會清空
+目錄（`emptyOutDir: !isDev`），另外兩個一律 `emptyOutDir: false`——所以 content 必須第一個跑，
+否則它會把另外兩個的產物刪掉。watch 模式靠 `DEV_WATCH=1` 讓 content 也不清空，改由 `clean`
+在啟動前清一次。
+
+改用 `run-s` / `run-p` 而不是 shell 的 `&&` 與 `& wait`，是因為舊寫法 `sh -c 'a & b & wait'`
+**退出碼恆為 0**——任何一個 watch build 掛掉都不會有訊號。`run-p` 會如實傳出非零退出碼。
 
 UI 以 React 掛在 Shadow DOM 內，樣式與宿主頁面互不干擾；popup 是獨立頁面，用一般 `<link>` / `<style>` 即可。
 
@@ -123,5 +170,5 @@ Chrome extension 難測的點在於：真正的環境（真實網站 DOM + 真�
 
 - **真實 AI API 永遠不進 CI。** 需要模型下載（22GB 空間）、硬體門檻、且輸出不決定性。demo 層的 stub 才是決定性的，適合自動化。
 - **demo 頁負責「降級路徑」。** 評論頁的 `?api=` 參數可以模擬「只有 LanguageModel」（＝一般使用者的真實情況）、「Rewriter 也在」、「兩個都沒有」三種環境，不必真的去改 `chrome://flags` 或換機器。這類環境相依的 bug（例如 Rewriter 沒進穩定版）看程式碼是看不出來的。
-- **框架綁定要有「會變紅」的監控。** 見 README 對評論頁那塊「框架 state」的說明。`writeReviewDraft()` 的 native setter + dispatch event 是給 Nuxt(Vue) 看的，jsdom 沒有框架，所以單元測試對它永遠是綠的。
+- **框架綁定要有「會變紅」的監控。** demo 評論頁上那塊「框架 state」是刻意做的：它模擬 Nuxt(Vue) 的 `v-model` 只在收到 `input` 事件時才同步自己的 state，而「送出」送的是 state 而不是 `el.value`。[`writeReviewDraft()`](../src/lib/reviewPage.ts) 的 native setter + dispatch event 就是為了餵這個綁定——哪天少了派發事件那一步，那塊會變紅並顯示送出去的是舊值。jsdom 沒有框架，所以單元測試對這個失敗模式永遠是綠的。
 - **selector 是最脆弱的地方。** [`getReviewTextarea()`](../src/lib/reviewPage.ts) 目前用「placeholder 關鍵字 → 退回第一個 textarea」的通用寫法。要真正防漂移，得把真實評論頁的 DOM 片段存成 fixture 讓單元測試對它跑（尚未做，需要登入的訂單頁才抓得到）。

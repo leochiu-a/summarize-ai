@@ -5,8 +5,13 @@
   "main": "index.js",
   "scripts": {
     "test": "vp test run",
-    "build": "vp build && vp build --config vite.popup.config.ts",
-    "dev": "rm -rf dist && DEV_WATCH=1 sh -c 'vp build --watch & vp build --watch --config vite.popup.config.ts & wait'",
+    "clean": "rm -rf dist",
+    "build": "run-s build:content build:popup build:webmcp",
+    "build:content": "vp build",
+    "build:popup": "vp build --config vite.popup.config.ts",
+    "build:webmcp": "vp build --config vite.webmcp.config.ts",
+    "dev": "run-s clean dev:watch",
+    "dev:watch": "DEV_WATCH=1 run-p -l \"build:* -- --watch\"",
     "demo": "vp build && node scripts/demo-server.mjs",
     "demo:serve": "node scripts/demo-server.mjs",
     "typecheck": "tsc --noEmit",
@@ -27,6 +32,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "jsdom": "^29.1.1",
+    "npm-run-all2": "^9.0.3",
     "typescript": "^7.0.2",
     "vite-plus": "^0.2.6",
     "web-ext": "^10.5.0"

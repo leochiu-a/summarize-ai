@@ -10,11 +10,15 @@
 
 **這一段就是後台「Summary from package」自動帶出來的文字**——它直接讀取 `public/manifest.json`
 的 `"description"` 欄位，不是表單裡另外填的獨立欄位，也沒辦法在後台直接編輯，要改字就是改
-manifest 再重新上傳套件。目前約 96 字元，在上限內：
+manifest 再重新上傳套件。目前 106 字元，在上限內：
 
 ```text
-kkday.com 專屬 pixel 小夥伴：用 Chrome 內建 AI 摘要頁面、生成商品重點、潤飾與翻譯評論、分析值不值得買，全程裝置端運算不上傳
+kkday.com 專屬 pixel 小夥伴：用 Chrome 內建 AI 摘要頁面、生成商品重點、潤飾與翻譯評論、分析值不值得買（裝置端運算），並提供唯讀 WebMCP tool 供你的 AI agent 查詢
 ```
+
+⚠️ 這裡**刻意不再寫「全程裝置端運算不上傳」**。WebMCP 那一層沒有用到任何內建 AI，推論發生在
+使用者自己帶來的 agent（可能是雲端服務），而且它會呼叫站方 API。原本那句話涵蓋不了這條路徑，
+留著會變成不實陳述。
 
 ## 詳細描述（Detailed description）
 
@@ -36,9 +40,20 @@ kkday.com 專屬 pixel 小夥伴：用 Chrome 內建 AI 摘要頁面、生成商
 • 智慧快取：同一頁面短時間內重新開啟直接顯示上次的結果，不用重跑
 • emoji 互動反應：看完摘要按個表情，小夥伴會用他的個性回你一句話
 
-【隱私優先，全程本機運算】
+【給 AI agent 用的唯讀查詢工具（實驗性）】
 
-所有摘要、商品分析、評論潤飾與翻譯，都由 Chrome 瀏覽器內建的 on-device AI 模型（Gemini Nano 等）直接在你的裝置上運算完成，頁面內容與產生的結果都不會被傳送到任何伺服器——包含我們自己的伺服器在內，因為我們根本沒有經營任何伺服器。所有設定與快取只存在你自己的瀏覽器裡。完整說明請見隱私權政策。
+除了上面那些「小夥伴自己幫你讀」的功能，本擴充功能還透過 WebMCP 標準，在 kkday.com 頁面上註冊兩支唯讀查詢工具，讓你自己選用的 AI agent（例如 Chrome 內建的 Gemini、或你接上的其他 MCP client）可以直接呼叫：
+
+• 商品搜尋：依關鍵字、評分與評論數門檻回傳候選商品，附評分、價格區間與最早可出發日
+• 方案可訂性查詢：查某個日期各方案訂不訂得到，以及剩餘數量
+
+這兩支工具都是唯讀的：它們只查詢與回報資訊，不會修改頁面、不會變更你的帳號狀態，也沒有任何下單或付款的功能。這一層是實驗性功能，需要 Chrome 開啟 WebMCP 相關旗標才會生效。
+
+【隱私說明】
+
+摘要、商品分析、評論潤飾與翻譯這幾項，都由 Chrome 瀏覽器內建的 on-device AI 模型（Gemini Nano 等）直接在你的裝置上運算完成，頁面內容與產生的結果不會被傳送到任何伺服器——我們沒有經營任何伺服器，也不會蒐集你的資料。所有設定與快取只存在你自己的瀏覽器裡。
+
+上面的 WebMCP 查詢工具是不一樣的路徑，要分開理解：當你的 AI agent 呼叫這些工具時，工具回傳的內容會交給那個 agent 處理。如果你使用的是雲端 AI 服務，那些內容就會依該服務自己的隱私權政策被傳送與處理——我們無法控制、也不會經手。工具本身只會向 kkday.com 自己的 API 查詢資料，不會傳送到任何其他地方。完整說明請見隱私權政策。
 
 【使用需求】
 
@@ -53,10 +68,21 @@ https://github.com/leochiu-a/summarize-ai
 
 ## 單一用途說明（Single purpose description）
 
-審核表單會要求一句話說明這個 extension 只做一件事。功能雖然有摘要／商品分析／評論潤飾／翻譯多項，但都收斂在「用內建 AI 協助使用者在 kkday.com 上閱讀與撰寫內容」這個單一用途底下：
+⚠️ **這是整份文案裡審查風險最高的一欄。** 加入 WebMCP 之後，這個 extension 有兩條技術上很不一樣
+的路徑（我們自己跑內建 AI／把資料交給使用者的 agent），審查員有理由問「這是不是兩個用途」。
+
+收斂的方式是把用途定義在**使用者得到什麼**，而不是**哪個模型在算**：兩條路徑都只做一件事——
+把 kkday 頁面上的資訊變得更好理解。摘要、商品分析、評論潤飾翻譯、以及提供給 agent 的唯讀查詢
+工具，全部都是這件事的不同手段，沒有任何一項脫離「輔助理解 kkday 內容」。
 
 ```text
-在 kkday.com 上使用瀏覽器內建的 on-device AI，協助使用者理解與撰寫頁面內容：摘要頁面與商品資訊、生成購買建議，並潤飾與翻譯評論。全部功能都圍繞「輔助閱讀與撰寫 kkday 內容」這個單一用途。
+在 kkday.com 上協助使用者理解頁面內容。功能分兩種手段但只服務這一個用途：（1）用 Chrome 內建的 on-device AI 摘要頁面與商品資訊、生成購買建議、潤飾與翻譯評論；（2）透過 WebMCP 標準提供兩支唯讀查詢工具（商品搜尋、方案可訂性），讓使用者自己選用的 AI agent 能直接取得結構化的商品事實，不必自行解析頁面。兩者都只讀取與呈現 kkday 頁面上的資訊，不會修改頁面或帳號狀態，也不具備任何下單或付款功能。
+```
+
+英文版（審查員多半讀英文，這一欄建議一併提供）：
+
+```text
+This extension helps users understand content on kkday.com. It uses two mechanisms in service of that single purpose: (1) Chrome's built-in on-device AI to summarize pages and product information, generate a "worth it?" suggestion, and polish and translate reviews; (2) two read-only tools exposed via the WebMCP standard (product search and package availability) so that an AI agent chosen by the user can obtain structured product facts directly instead of parsing the page. Both mechanisms only read and present information already on kkday.com. Neither modifies page or account state, and there is no ordering, checkout, or payment capability of any kind.
 ```
 
 ## Permission justification（權限用途說明）
@@ -78,10 +104,24 @@ buying suggestion on product pages, polishing the user's own draft review
 on review-writing pages, and translating other travelers' reviews into the
 user's language on product pages. All of this uses Chrome's built-in
 on-device AI (Summarizer, Prompt/LanguageModel, Rewriter, Translator and
-LanguageDetector). Host permission is limited to kkday.com and its
-subdomains only — the extension does not run on, and has no access to, any
-other website. No page content is transmitted anywhere — all processing
-runs entirely on-device.
+LanguageDetector) and runs entirely on the user's device.
+
+The same host permission also covers a second, read-only content script
+that runs in the main world on kkday.com pages. It registers two read-only
+tools via the WebMCP standard (document.modelContext) so that an AI agent
+chosen by the user can query structured product facts: product search and
+package availability. To answer those queries it reads the page's own
+Nuxt state (window.__NUXT__) for product and package identifiers, and
+makes same-origin GET requests to kkday.com's own public endpoints
+(ajax_get_product_list and fetch-items-data). These requests go only to
+kkday.com, never to us or any third party — we operate no servers. Both
+tools are read-only: they cannot modify page or account state, and there
+is no ordering, checkout, or payment capability. When the user's agent
+invokes a tool, the returned information is handled by that agent under
+its own privacy policy; the extension itself transmits nothing.
+
+Host permission is limited to kkday.com and its subdomains only — the
+extension does not run on, and has no access to, any other website.
 ```
 
 ### storage justification（對應 `"permissions": ["storage"]`）
@@ -123,14 +163,38 @@ https://leochiu-a.github.io/summarize-ai/privacy-policy.html
 | Location | 否 | 不適用 |
 | **Web history** | **是** | 快取把「網址／商品 id＋頁面標題＋時間戳記」存在本機（頁面摘要 30 分鐘、商品摘要 24 小時），對應範例「頁面清單、標題、造訪時間」 |
 | User activity | 否 | 只監聽自己 UI 元件（頭像／emoji／翻譯按鈕）的點擊，不追蹤頁面上的滑鼠／捲動／按鍵 |
-| **Website content** | **是** | 核心功能：讀取當前頁面文字內容（頁面正文、商品說明、他人評論）以產生摘要、購買建議與翻譯；使用者自己撰寫中的評論文字也會讀取以進行潤飾。全部僅在本機處理 |
+| **Website content** | **是** | 核心功能：讀取當前頁面文字內容（頁面正文、商品說明、他人評論）以產生摘要、購買建議與翻譯；使用者自己撰寫中的評論文字也會讀取以進行潤飾。另外 WebMCP 層會讀取頁面的 Nuxt 狀態（`window.__NUXT__`）取得商品與方案 id |
 
-三個「I certify」勾選框都勾選——資料不賣給第三方、用途不超出摘要這個單一用途、
+三個「I certify」勾選框都勾選——資料不賣給第三方、用途不超出上述單一用途、
 不涉及信用評分或放貸，這三項對本專案都成立。
 
-勾選 Web history + Website content 後，記得跟 [privacy-policy.html](privacy-policy.html) 的內容
-保持一致（審核時會交叉比對）：目前隱私權政策已經提到「快取內容包含頁面網址與產生的摘要文字」，
-已經對得起來，之後改動快取或擷取邏輯時兩邊要一起更新。
+### ⚠️ WebMCP 讓「僅在本機處理」不再是全部的事實
+
+原本這張表底下可以直接寫「全部僅在本機處理」。加入 WebMCP 之後有**兩條新的資料流出路徑**，
+必須在表單的說明欄位裡主動講清楚，否則審核交叉比對時會被認定揭露不實：
+
+1. **對 kkday.com 的同源 API 請求。** `search_products` 會打 `ajax_get_product_list`（帶使用者
+   的搜尋關鍵字）、`check_package_availability` 會打 `fetch-items-data`。這是本擴充功能**第一次
+   發出網路請求**——目的地只有 kkday.com 自己，但「完全不連網」這個說法已經不成立。
+2. **交給使用者自己的 AI agent。** tool 回傳的內容會進入那個 agent。如果它是雲端服務
+   （Chrome 內建的 Gemini、其他 MCP client），資料就會離開裝置，依該服務自己的隱私權政策處理。
+   **我們不是傳送方，但我們是刻意建立這條管道的人**，所以要揭露。
+
+建議在 Website content 的說明欄位補一句：
+
+```text
+Product and package information returned by the extension's two read-only
+WebMCP tools is passed to an AI agent that the user has chosen and
+connected. If that agent is a cloud service, the returned information
+leaves the device and is handled under that service's own privacy policy.
+The extension itself operates no servers and transmits nothing to us or
+any third party; its only outbound requests are same-origin GETs to
+kkday.com's own endpoints.
+```
+
+跟 [privacy-policy.html](privacy-policy.html) 的內容要保持一致（審核時會交叉比對）——隱私權政策
+已同步補上「WebMCP 查詢工具」與「網路請求」兩節。之後改動快取、擷取邏輯或 tool 行為時，
+**三個地方（manifest description、這份文案、隱私權政策）要一起更新**。
 
 （需要先在 repo 的 Settings → Pages 開啟 GitHub Pages，Source 選 `main` 分支的 `/docs` 資料夾，
 才會產生這個網址。首次啟用後通常 1–2 分鐘生效。）
