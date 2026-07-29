@@ -21,31 +21,44 @@ function chunkStream(chunks: string[]): AsyncIterable<string> {
   }
 }
 
-// 可控的 LanguageModel stub：promptStreaming 依序吐 chunks，並記錄 create / prompt 參數。
-// clone() 回傳同一個物件（真實 API 會複製 baseline session；這裡只需要記到 prompt 就夠）。
+interface FakeSession {
+  destroyed: number
+}
+
+// 可控的 LanguageModel stub。
+// clone() 刻意回傳**另一個物件**並各自記自己的 destroy 次數——真實 API 就是這樣，
+// 而「clone 用完丟掉、baseline 留著重用」正是預熱機制的核心契約。若 clone 回傳
+// baseline 自己、destroy 又是 no-op，那把 clone 的 destroy 改成收 baseline 也測不出來。
 function stubLanguageModel(chunks: string[]) {
   const createCalls: CreateCall[] = []
   const promptCalls: PromptCall[] = []
-  const cloneCalls = { count: 0 }
+  const baselines: FakeSession[] = []
+  const clones: FakeSession[] = []
+
+  const makeSession = (bucket: FakeSession[]) => {
+    const session = {
+      destroyed: 0,
+      promptStreaming: (input: string) => {
+        promptCalls.push({ input })
+        return chunkStream(chunks)
+      },
+      clone: async () => makeSession(clones),
+      destroy: () => {
+        session.destroyed += 1
+      },
+    }
+    bucket.push(session)
+    return session
+  }
+
   vi.stubGlobal('LanguageModel', {
     availability: async () => 'available',
     create: async (opts?: LanguageModelCreateOptions) => {
       createCalls.push({ opts })
-      const session: Record<string, unknown> = {
-        promptStreaming: (input: string) => {
-          promptCalls.push({ input })
-          return chunkStream(chunks)
-        },
-        clone: async () => {
-          cloneCalls.count += 1
-          return session
-        },
-        destroy: () => {},
-      }
-      return session
+      return makeSession(baselines)
     },
   })
-  return { createCalls, promptCalls, cloneCalls }
+  return { createCalls, promptCalls, baselines, clones }
 }
 
 afterEach(() => {
@@ -82,15 +95,27 @@ describe('generateProductSummary（串流一段話）', () => {
     expect(promptCalls[0].input).not.toContain('一段話')
   })
 
-  it('用 clone 出來的 session 提問，baseline 留著不重建', async () => {
-    const { createCalls, cloneCalls } = stubLanguageModel(['x'])
+  it('用 clone 出來的 session 提問；clone 用完就收，baseline 留著不重建', async () => {
+    const { createCalls, baselines, clones } = stubLanguageModel(['x'])
 
     await prewarmProductSummary('humorous') // 預熱：建 baseline
     await generateProductSummary('內文', 'humorous')
     await generateProductSummary('內文2', 'humorous')
 
     expect(createCalls.length).toBe(1) // baseline 只建一次
-    expect(cloneCalls.count).toBe(2) // 每次生成各 clone 一份
+    expect(clones.length).toBe(2) // 每次生成各 clone 一份
+    expect(clones.every((c) => c.destroyed === 1)).toBe(true) // clone 用完就 destroy
+    expect(baselines[0].destroyed).toBe(0) // baseline 留著給下一次，沒被誤收
+  })
+
+  it('release() 才收掉 baseline', async () => {
+    const { baselines } = stubLanguageModel(['x'])
+
+    await generateProductSummary('內文', 'humorous')
+    expect(baselines[0].destroyed).toBe(0)
+
+    releaseProductSummary()
+    await vi.waitFor(() => expect(baselines[0].destroyed).toBe(1))
   })
 
   it('語氣換了 → 重建 baseline（system 指示要換）', async () => {

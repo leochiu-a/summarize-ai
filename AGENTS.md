@@ -17,7 +17,8 @@ pnpm run dev        # 三個 bundle 並行 watch
 pnpm run build      # 產出 dist/
 pnpm run typecheck  # tsc --noEmit
 pnpm test           # vitest（jsdom）
-pnpm demo           # build 一次 + 起本機預覽 server（見下方）
+pnpm demo           # 只重建 content bundle + 起本機預覽 server（見下方）
+pnpm run build && pnpm run demo:serve   # 要看商品頁的 WebMCP 檢視器要用這個
 ```
 
 MV3 需要三種形狀的產物，所以 build 拆成 `build:content` / `build:popup` / `build:webmcp`。
@@ -66,10 +67,13 @@ MV3 需要三種形狀的產物，所以 build 拆成 `build:content` / `build:p
 （改版就掃到）。商品頁的卡片注入還要等 hydration 完成才插入，否則會被 Vue 重繪洗掉——
 細節在 [`src/productPageSummary.ts`](src/productPageSummary.ts) 的註解。
 
-## demo（`pnpm demo`）的兩個坑
+## demo（`pnpm demo`）的三個坑
 
 本機預覽頁在 `demo/`，server 是 [`scripts/demo-server.mjs`](scripts/demo-server.mjs)。
 
+- **`pnpm demo` 只跑 `build:content`，而且會清空 `dist`**（`vite.config.ts` 的 `emptyOutDir` 在非
+  watch 模式是 `true`）。也就是說它會把 `webmcp.js` 與 popup 產物刪掉——`demo/product.html` 載的
+  `/webmcp.js` 一定 404。要看商品頁的 WebMCP 檢視器請用 `pnpm run build && pnpm run demo:serve`。
 - **資產由 server 對應到 `dist/`**：`/assets/**` → `dist/assets/**`，`/content.js` → `dist/content.js`。
   不要把 sprite / emoji `cp` 進 `demo/`（`.gitignore` 裡 `demo/assets/` 是舊做法的殘留）。
   改完程式跑 `pnpm dev` 再重新整理即可，server 一律回 `no-store`。

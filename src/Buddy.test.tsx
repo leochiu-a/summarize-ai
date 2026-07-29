@@ -327,15 +327,20 @@ describe('Buddy 兩段式觸發（打開只展開、按鈕才跑）', () => {
     expect(screen.queryByText(/不該出現/)).toBeNull()
   })
 
-  it('點頭像時預先載入模型（create 過但還沒摘要）', async () => {
+  it('點頭像時預先載入模型；按下 CTA 沿用預熱好的實例，不重建', async () => {
     seedArticle()
-    const calls = stubSummarizer(chunkStream(['不該出現']))
+    const calls = stubSummarizer(chunkStream(['台灣自由行攻略']))
     render(<Buddy />)
 
     fireEvent.click(avatar())
 
     await waitFor(() => expect(calls.create).toBe(1)) // 預熱
     expect(calls.summarize).toBe(0)
+
+    fireEvent.click(summaryCta())
+    await screen.findByRole('button', { name: '讚' })
+    expect(calls.summarize).toBe(1)
+    expect(calls.create).toBe(1) // 沿用預熱好的實例（prepare 與 take 的 slot key 一致）
   })
 
   it('商品頁點頭像只展開，按下 CTA 才判斷；預熱不推論', async () => {

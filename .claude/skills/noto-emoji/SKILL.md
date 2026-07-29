@@ -102,7 +102,7 @@ head -c 60 <code>.webp | strings       # 應看到 VP8X ANIM ANMF（有動畫）
 ## Step 6：目視驗證（jsdom 測不到圖片有沒有載到）
 
 ```bash
-pnpm run build && pnpm demo
+pnpm run build && pnpm run demo:serve
 ```
 
 在 demo 頁的 console 抓 shadow root 檢查——`naturalWidth` 是 0 就代表資產 404 了：

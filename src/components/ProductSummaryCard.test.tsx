@@ -74,6 +74,45 @@ describe('ProductSummaryCard', () => {
 
     await waitFor(() => expect(screen.getByText(MODEL_OUTPUT)).toBeTruthy())
     expect(calls.prompt).toBe(1)
+    expect(calls.create).toBe(1) // 沿用掛載時預熱的 baseline，沒有重建
+  })
+
+  it('產生失敗後留一條路回去：出現「再試一次」，按了會重跑', async () => {
+    seedDescSection()
+    let failNext = true
+    const calls = { prompt: 0 }
+    vi.stubGlobal('LanguageModel', {
+      availability: async () => 'available',
+      create: async () => {
+        const session: Record<string, unknown> = {
+          promptStreaming: () => {
+            calls.prompt += 1
+            if (failNext) {
+              failNext = false
+              throw new Error('模型忙碌中')
+            }
+            return {
+              async *[Symbol.asyncIterator]() {
+                yield MODEL_OUTPUT
+              },
+            }
+          },
+          clone: async () => session,
+          destroy: () => {},
+        }
+        return session
+      },
+    })
+    render(<ProductSummaryCard />)
+
+    fireEvent.click(activateBtn())
+    await waitFor(() => expect(screen.getByText(/摘要失敗/)).toBeTruthy())
+
+    const retry = screen.getByRole('button', { name: '再試一次' })
+    fireEvent.click(retry)
+
+    await waitFor(() => expect(screen.getByText(MODEL_OUTPUT)).toBeTruthy())
+    expect(calls.prompt).toBe(2)
   })
 
   it('掛載時預先載入模型（create 過但還沒提問）', async () => {
