@@ -29,7 +29,7 @@
   <script>
     window.__NUXT__ = { data: { junk: '這也是框架垃圾，不該進摘要' } };
     window.chrome = window.chrome || {};
-    chrome.runtime = { getURL: (p) => p };
+    chrome.runtime = { getURL: (p) => '/' + p }; // 資產走根目錄絕對路徑（同 index.html）
     window.Summarizer = { availability: async () => 'available', create: async () => ({ summarizeStreaming: () => ({ [Symbol.asyncIterator]() { return { next: () => Promise.resolve({ done: true }) }; } }), destroy() {} }) };
   </script>
   <script src="/content.js"></script>

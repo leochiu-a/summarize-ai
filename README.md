@@ -8,13 +8,15 @@
 
 | 功能 | 觸發頁面 | 說明 | Chrome AI API |
 | --- | --- | --- | --- |
-| **頁面摘要** | 全站每頁 | 點右下角小夥伴，把整頁內容摘要成一段泡泡；串流輸出時嘴巴會動。語氣、摘要類型可在 popup 調。 | Summarizer |
-| **商品重點摘要卡片** | 商品頁 `/product/<id>` | 在「商品說明」標題下方自動插入一張卡片，一段話說明「這是什麼商品、適合哪種旅客」，視覺對齊 KKday 原生 AI 評論摘要框。 | Prompt（`LanguageModel`）|
-| **值不值得買** | 商品頁 | 小夥伴綜合評分、價格、折扣券等給「結論先行 + 短理由」的購買建議。 | Prompt（`LanguageModel`）|
+| **頁面摘要** | 全站每頁 | 點右下角小夥伴展開泡泡，按「幫我摘要這頁」把整頁內容摘要成一段泡泡；串流輸出時嘴巴會動。語氣、摘要類型可在 popup 調。 | Summarizer |
+| **商品重點摘要卡片** | 商品頁 `/product/<id>` | 在「商品說明」標題下方自動插入一張卡片，按「產生 AI 摘要」用一段話說明「這是什麼商品、適合哪種旅客」，視覺對齊 KKday 原生 AI 評論摘要框。 | Prompt（`LanguageModel`）|
+| **值不值得買** | 商品頁 | 點小夥伴展開泡泡，按「幫我看值不值得」，綜合評分、價格、折扣券等給「結論先行 + 短理由」的購買建議。 | Prompt（`LanguageModel`）|
 | **評論潤飾** | 評論撰寫頁 `/order/comment/<id>` | 你寫好評論後，小夥伴幫你順句、潤飾（只順句、不杜撰）；要按「套用」才寫回，不代送。 | Rewriter，不可用時退回 Prompt |
 | **翻譯所有評論** | 商品頁評論區 | 一鍵把非你語系的評論就地翻成你的語言，可切換原文 / 譯文。 | Translator + LanguageDetector |
 
 第一次用到某個模型時，小夥伴會先徵求同意再下載 Gemini Nano，並顯示下載進度（Chrome 要求模型下載必須由使用者手勢觸發）。
+
+上面三個用 Gemini Nano 的功能都是「**打開只展開，按鈕才跑**」：打開的那一刻只在背景把模型載進記憶體（預熱），按下按鈕時 cold start 已經被吃掉；半小時 / 24 小時內有快取則打開就直接顯示上次結果，連按鈕都不用。理由與作法見 [ARCHITECTURE 的〈預熱與 session 生命週期〉](docs/ARCHITECTURE.md#預熱與-session-生命週期)。
 
 ### 另一條實驗性的路：WebMCP tool
 
@@ -134,6 +136,8 @@ pnpm demo
 ## 專案結構
 
 ```
+AGENTS.md          寫給 coding agent 的入場說明（慣例紅線 + 地圖）
+.claude/skills/    專案內建 skill：webmcp、bump-version、noto-emoji
 public/            MV3 manifest、sprite、emoji 等資產（原樣複製進 dist）
 src/               content script 進入點、小夥伴編排（Buddy / content.tsx）
 src/webmcp.ts      WebMCP 註冊層進入點（獨立 bundle，跑在 MAIN world）

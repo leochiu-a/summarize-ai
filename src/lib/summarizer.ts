@@ -2,6 +2,7 @@
 // Summarizer API 的型別由 @types/dom-chromium-ai 提供（tsconfig types 已引入）
 
 import { Readability } from '@mozilla/readability'
+import { createWarmSlot } from './warmSession'
 
 // Summarizer 有輸入額度限制，過長的內文截斷處理
 const MAX_CHARS = 16000
@@ -95,4 +96,44 @@ export function escapeHtml(s: string): string {
 export function pickOutputLanguage(): string {
   const pageLang = (document.documentElement.lang || navigator.language || 'en').toLowerCase()
   return pageLang.startsWith('zh') ? 'zh-Hant' : pageLang.split('-')[0]
+}
+
+/**====================== Summarizer 實例（預熱 / 取用） ======================*/
+// 使用者展開泡泡時就先把 Summarizer 建起來（預熱），按下按鈕才真的 summarizeStreaming。
+// Summarizer 實例本身無狀態（沒有 clone、也不累積歷史），同一組選項可以重複使用，
+// 所以這裡直接沿用同一個實例，只在收合泡泡時 release。
+// 選項變了（使用者改語氣 / 摘要類型）→ key 不同 → warm slot 自動收掉舊的重建。
+
+// 這裡用得到的 create 選項（signal / monitor 不用，也不能序列化成 key）
+export type SummarizerOptions = Omit<SummarizerCreateOptions, 'signal' | 'monitor'>
+
+const summarizerSlot = createWarmSlot<Summarizer>((key) =>
+  createSummarizer(JSON.parse(key) as SummarizerOptions),
+)
+
+// 建立 Summarizer。部分語言不在支援清單，帶 outputLanguage 失敗時退回預設輸出語言。
+async function createSummarizer(options: SummarizerOptions): Promise<Summarizer> {
+  try {
+    return await Summarizer.create({ ...options, outputLanguage: pickOutputLanguage() })
+  } catch {
+    return await Summarizer.create(options)
+  }
+}
+
+// key 就是 create 選項本身（序列化）：選項一樣才算同一份預熱
+const slotKey = (options: SummarizerOptions) => JSON.stringify(options)
+
+/** 預熱：先把這組選項的 Summarizer 建起來放著（失敗由呼叫端吞掉，預熱是機會財）。 */
+export function warmSummarizer(options: SummarizerOptions): Promise<Summarizer> {
+  return summarizerSlot.warm(slotKey(options))
+}
+
+/** 取用：命中預熱＝零等待；沒預熱過（或選項變了）就現場建。 */
+export function takeSummarizer(options: SummarizerOptions): Promise<Summarizer> {
+  return summarizerSlot.take(slotKey(options))
+}
+
+/** 收掉預熱／使用中的 Summarizer（泡泡收合時呼叫，別把 session 留在記憶體）。 */
+export function releaseSummarizer(): void {
+  summarizerSlot.release()
 }

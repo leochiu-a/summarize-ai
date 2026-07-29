@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProductFacts } from './productFacts'
-import { buildInstruction, factsToText } from './worthIt'
+import { buildFactsPrompt, buildSystemInstruction, factsToText } from './worthIt'
 
 const FACTS: ProductFacts = {
   name: '釜山通行證 VISIT BUSAN PASS',
@@ -45,20 +45,33 @@ describe('factsToText', () => {
   })
 })
 
-describe('buildInstruction', () => {
-  it('要求結論先行、繁中、帶入事實，並禁止杜撰與自行算數', () => {
-    const ins = buildInstruction('serious', FACTS)
+describe('buildSystemInstruction', () => {
+  it('要求結論先行、繁中，並禁止杜撰與自行算數', () => {
+    const ins = buildSystemInstruction('serious')
     expect(ins).toContain('繁體中文')
     expect(ins).toContain('結論先行')
     expect(ins).toMatch(/不要.*計算|不要自己計算|不要杜撰|不得杜撰/)
-    // 帶入語氣與事實
-    expect(ins).toContain('客觀中立')
-    expect(ins).toContain('4.83')
-    expect(ins).toContain('TWD 600')
+    expect(ins).toContain('客觀中立') // 帶入語氣
   })
 
   it('不同語氣會反映在指示中', () => {
-    expect(buildInstruction('humorous', FACTS)).toContain('幽默')
-    expect(buildInstruction('cynical', FACTS)).toContain('厭世')
+    expect(buildSystemInstruction('humorous')).toContain('幽默')
+    expect(buildSystemInstruction('cynical')).toContain('厭世')
+  })
+
+  it('不含商品事實（規則要能在 create() 就當 system message 送出、與事實無關）', () => {
+    const ins = buildSystemInstruction('serious')
+    expect(ins).not.toContain('4.83')
+    expect(ins).not.toContain('TWD 600')
+  })
+})
+
+describe('buildFactsPrompt', () => {
+  it('只帶事實（規則已在 system message）', () => {
+    const prompt = buildFactsPrompt(FACTS)
+    expect(prompt).toContain('商品事實：')
+    expect(prompt).toContain('4.83')
+    expect(prompt).toContain('TWD 600')
+    expect(prompt).not.toContain('結論先行')
   })
 })

@@ -22,7 +22,9 @@
 <script>
 // ---- stub chrome.runtime（demo 環境沒有 extension runtime）----
 window.chrome = window.chrome || {};
-chrome.runtime = { getURL: (path) => path };
+// 真實的 getURL 回絕對的 chrome-extension:// URL；demo 用根目錄絕對路徑，
+// 否則巢狀路徑（/order/comment/…、/zh-tw/product/…）會把資產解成相對路徑而 404
+chrome.runtime = { getURL: (path) => '/' + path };
 
 // ---- stub Summarizer API：模擬模型串流輸出 ----
 window.Summarizer = {

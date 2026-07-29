@@ -95,10 +95,19 @@
   font-size: 14px;
 }
 
+/* 還沒產生摘要時的邀請 + 按鈕 */
+.ps-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .ps-activate {
   all: unset;
   cursor: pointer;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   font-size: 14px;
   font-weight: 600;
   color: #fff;
@@ -113,4 +122,22 @@
 }
 .ps-activate:active {
   transform: scale(0.97);
+}
+/* 按鈕上的 ✨（EmojiIcon）：這個 shadow root 沒有 content.css，基底規則要自己寫一份。
+   預設靜態 SVG，hover 才換成 Noto 動畫 webp（機制與小夥伴那邊一致） */
+.ps-activate .emoji-static,
+.ps-activate .emoji-anim {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  display: block;
+}
+.ps-activate .emoji-anim {
+  display: none;
+}
+.ps-activate:hover .emoji-static {
+  display: none;
+}
+.ps-activate:hover .emoji-anim {
+  display: block;
 }

@@ -4,6 +4,7 @@
 
 import type { ProductFacts } from './productFacts'
 import type { ToneId } from './settings'
+import { createWarmSlot } from './warmSession'
 
 // 值不值得專屬語氣：對應 popup 的 ToneId，讓使用者的語氣設定直接套用到這裡。
 const WORTH_TONES: Record<ToneId, string> = {
@@ -53,20 +54,50 @@ export function factsToText(facts: ProductFacts): string {
   return lines.join('\n')
 }
 
-// 給模型的指示：結論先行 + 短理由，只依提供的事實、不得杜撰。
-export function buildInstruction(tone: ToneId, facts: ProductFacts): string {
+// 給模型的規則：結論先行 + 短理由，只依提供的事實、不得杜撰。
+// 這段不含商品事實，所以能在 create() 時就當 system message 送進去（見下方 worthSlot）——
+// 依 Chrome 官方建議〈Set initial prompts during creation〉，規則先處理完，第一個 prompt 更快。
+export function buildSystemInstruction(tone: ToneId): string {
   return (
     '你是幫使用者判斷「這個 KKday 商品值不值得下手」的購物小幫手。' +
-    '請用繁體中文（台灣），根據下面提供的商品事實，給出「結論先行 + 簡短理由」的建議，' +
+    '請用繁體中文（台灣），根據使用者提供的商品事實，給出「結論先行 + 簡短理由」的建議，' +
     '總長約 2～4 句：\n' +
     '1) 第一句直接給結論，用「值得下手」「可以考慮」「再想想」這類明確措辭開頭；\n' +
     '2) 接著用 1～2 句說明理由，可綜合評分、評論數、價格、折扣券、取消政策等；\n' +
     '3) 若有划算的折扣券或促銷，點出來提醒使用者別忘了用（但不要自己計算折後金額，' +
     '也不要杜撰沒提供的數字或條件）。\n' +
-    '只根據下列事實作答，沒有的資訊就不要提；不要用 Markdown 符號（# 或 *）、不要分段或條列。\n' +
-    `語氣：${WORTH_TONES[tone] ?? WORTH_TONES.humorous}\n\n` +
-    `商品事實：\n${factsToText(facts)}`
+    '只根據使用者提供的事實作答，沒有的資訊就不要提；不要用 Markdown 符號（# 或 *）、' +
+    '不要分段或條列。\n' +
+    `語氣：${WORTH_TONES[tone] ?? WORTH_TONES.humorous}`
   )
+}
+
+// 真正送出的 prompt：只有事實（規則已在 system message）。
+export function buildFactsPrompt(facts: ProductFacts): string {
+  return `商品事實：\n${factsToText(facts)}`
+}
+
+/**====================== session（預熱 / 取用） ======================*/
+// 使用者展開泡泡時就先建好帶 system 指示的 baseline session（預熱），按下按鈕才 clone 出來問。
+// clone 而非直接用 baseline：依官方〈Clone sessions for repetitive tasks〉，baseline 保持乾淨、
+// 不累積歷史，重做時也不會被上一輪的對話影響。key = 語氣（語氣決定 system 指示）。
+const worthSlot = createWarmSlot<LanguageModel>(async (tone) => {
+  if (typeof LanguageModel === 'undefined') {
+    throw new Error('這個瀏覽器不支援內建 Prompt API（需要 Chrome 138+，且裝置符合硬體需求）。')
+  }
+  return await LanguageModel.create({
+    initialPrompts: [{ role: 'system', content: buildSystemInstruction(tone as ToneId) }],
+  })
+})
+
+/** 預熱：先把這個語氣的 baseline session 建起來（失敗由呼叫端吞掉，預熱是機會財）。 */
+export function prewarmWorthIt(tone: ToneId): Promise<LanguageModel> {
+  return worthSlot.warm(tone)
+}
+
+/** 收掉 baseline session（泡泡收合時呼叫）。 */
+export function releaseWorthIt(): void {
+  worthSlot.release()
 }
 
 // 串流產生判斷：逐塊把累積內容透過 onChunk 往 UI 送，最後回傳完整內容。
@@ -75,19 +106,17 @@ export async function generateWorthIt(
   tone: ToneId,
   onChunk?: (accumulated: string) => void,
 ): Promise<string> {
-  if (typeof LanguageModel === 'undefined') {
-    throw new Error('這個瀏覽器不支援內建 Prompt API（需要 Chrome 138+，且裝置符合硬體需求）。')
-  }
-
-  const session = await LanguageModel.create()
+  // 命中預熱＝零等待；沒預熱過就在這裡現場建
+  const base = await worthSlot.take(tone)
+  const session = await base.clone()
   try {
     let acc = ''
-    for await (const chunk of session.promptStreaming(buildInstruction(tone, facts))) {
+    for await (const chunk of session.promptStreaming(buildFactsPrompt(facts))) {
       acc += chunk
       onChunk?.(acc)
     }
     return acc
   } finally {
-    session.destroy()
+    session.destroy() // 只收 clone，baseline 留著給下一次（重做 / 換商品）
   }
 }

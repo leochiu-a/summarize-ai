@@ -7,10 +7,12 @@ function assetUrl(path: string): string {
 
 interface EmojiIconProps {
   code: string
-  label: string
+  // 圖示本身要傳達的意思（給讀螢幕的人）。放在有文字的按鈕裡當裝飾時省略，
+  // 讓 alt="" 把它從 a11y tree 移除，避免和按鈕文字重複念一次。
+  label?: string
 }
 
-export function EmojiIcon({ code, label }: EmojiIconProps) {
+export function EmojiIcon({ code, label = '' }: EmojiIconProps) {
   return (
     <>
       <img className="emoji-static" src={assetUrl(`assets/emoji/${code}.svg`)} alt={label} />

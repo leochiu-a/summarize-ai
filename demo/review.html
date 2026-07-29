@@ -71,7 +71,8 @@ document.getElementById('submit').addEventListener('click', () => {
 
 // ── stub extension runtime ──────────────────────────────────────
 window.chrome = window.chrome || {}
-chrome.runtime = { getURL: (p) => p }
+// 這頁的路徑是巢狀的（/order/comment/<id>），資產一定要用根目錄絕對路徑，否則 404
+chrome.runtime = { getURL: (p) => '/' + p }
 
 // ── stub 內建 AI ────────────────────────────────────────────────
 // ?api=prompt（預設）→ 只有 LanguageModel，走 fallback 那條路（＝一般使用者的真實情況）
