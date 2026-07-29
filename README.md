@@ -30,15 +30,13 @@ Claude Code…）。這條路繞開了內建 AI 的兩個硬限制——繁中�
 | `search_products` | 全站 | 打 SRP 自己在用的 API，掃 60 筆回 12 筆候選，含評分／評論數／價格區間／最早可出發日 |
 | `check_package_availability` | 商品頁 | 打站方可訂性 API：問單日回逐方案可訂與否 + **剩餘數量**，問範圍回可訂日期清單。**不需要使用者先在頁面上選日期** |
 
-曾經有 7 支，[benchmark](docs/webmcp.md#benchmark為什麼從-7-支砍到-2-支) 之後砍到 2 支：
-**WebMCP 省的是「跨頁抓取與多步互動」，不是「包裝單頁資料」。**商品頁那 12,000 字本來就
-100% SSR、一次在 DOM 裡，包成 tool 實測反而更貴，所以 `get_product_terms` /
-`get_product_facts` / `get_product_reviews` 與 `read/write_review_draft` 全部移除。
 **沒有任何會改狀態的 tool，也沒有送出訂單或付款的 tool。**
 
 要跑起來：Chrome 需開 `chrome://flags/#enable-webmcp-testing`（WebMCP 目前是 origin trial；
 實測 Chrome 151 原生已可用）。不想開 flag 就跑 `pnpm demo` 開 `/zh-tw/product/12319`，那頁自帶
-polyfill 與 tool 檢視器。完整的設計理由、benchmark 與 eval 腳本見
+polyfill 與 tool 檢視器。
+
+為什麼只有兩支（曾經有 7 支）、benchmark 數據與 eval 腳本，見
 [`docs/webmcp.md`](docs/webmcp.md)。
 
 ## 需求
@@ -68,11 +66,11 @@ pnpm run build
 - **語氣**：幽默😜／正經🧐／溫柔🤗／熱血🔥／厭世🥱／文青🌸（預設幽默）。透過 `sharedContext` 影響模型口吻。
 - **摘要類型**：對應 Summarizer API 的 `type`——重點 / 懶人包 / 開場白 / 標題。
 
-語氣與摘要類型不同會各自快取。原始碼在 [`src/popup/`](src/popup)，資料層在 [`src/lib/settings.ts`](src/lib/settings.ts)。
+語氣與摘要類型不同會各自快取。
 
 ## 開發
 
-本專案用 [pnpm](https://pnpm.io/)（`packageManager` 已鎖版本；`.npmrc` 設 `node-linker=hoisted`，讓 tsc 找得到型別）。
+本專案用 [pnpm](https://pnpm.io/)，版本已鎖在 `packageManager`。
 
 ```bash
 pnpm install
@@ -85,15 +83,13 @@ pnpm run test:watch   # vitest watch
 
 測試涵蓋內容擷取、快取 / TTL、設定 merge、各功能的狀態機（React Testing Library）與 stub 掉的 Chrome AI API。
 
-實作細節與各功能的運作原理見 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
-
 ## 打包成 zip（上架 / 分發）
 
 ```bash
 pnpm run package
 ```
 
-依序跑 typecheck → 測試 → build，再用 [web-ext](https://github.com/mozilla/web-ext) 把 `dist/` 打包成 `release/summarize_ai_buddy-<version>.zip`（版本號讀自 `manifest.json`）。這個 zip 可直接上傳到 [Chrome Web Store 開發者後台](https://chrome.google.com/webstore/devconsole) 或分享給別人手動安裝。`release/` 已列入 `.gitignore`，每次執行用 `--overwrite-dest` 覆蓋舊檔。
+依序跑 typecheck → 測試 → build，再用 [web-ext](https://github.com/mozilla/web-ext) 把 `dist/` 打包成 `release/summarize_ai_buddy-<version>.zip`（版本號讀自 `manifest.json`）。這個 zip 可直接上傳到 [Chrome Web Store 開發者後台](https://chrome.google.com/webstore/devconsole) 或分享給別人手動安裝。
 
 > 發新版本前，記得先更新 [`public/manifest.json`](public/manifest.json) 的 `version` 欄位。上架文案見 [`docs/store-listing.md`](docs/store-listing.md)。
 
@@ -110,14 +106,12 @@ pnpm demo
 | `/` | 文章頁（整頁摘要） |
 | `/homepage` | 非文章頁（框架垃圾過濾） |
 | `/order/comment/25KK268720222` | 評論撰寫頁（潤飾）。`?api=prompt`（預設，走 Prompt fallback）/ `?api=rewriter` / `?api=none` 可切換 stub 的 API 組合 |
-| `/zh-tw/product/12319` | 商品頁 + **WebMCP tool 檢視器**。列出註冊到的 tool，可直接執行看真實輸出與字元數；沒有原生 `document.modelContext` 時自動裝一份最小 polyfill。頁上「修好方案卡」按鈕可現場驗證 `check_package_availability` 的 warning 會消失 |
+| `/zh-tw/product/12319` | 商品頁 + **WebMCP tool 檢視器**。列出註冊到的 tool，可直接執行看真實輸出與字元數；沒有原生 `document.modelContext` 時自動裝一份最小 polyfill |
 | `/probe` | **不 stub 任何東西**，列出這台機器上各內建 AI API 的真實 `availability()`。查「為什麼我這裡不能用」先看這頁 |
 
-為什麼需要 server 而不是直接開檔案：評論頁靠 `isReviewPage()` 比對 `location.pathname`（`/order/comment/<id>`），`file://` 做不出那個形狀。
+要用 server 而不是直接開檔案，是因為頁面偵測比對 `location.pathname`，`file://` 做不出那個形狀。開發時另一個 terminal 跑 `pnpm dev`（watch build），改完存檔重新整理即可（server 一律回 `no-store`、直接讀 `dist/`）。server 已經在跑的話用 `pnpm demo:serve` 跳過 build。
 
-`/content.js` 由 server 直接讀 `dist/content.js`，不用複製。開發時另一個 terminal 跑 `pnpm dev`（watch build），改完存檔重新整理即可（server 一律回 `no-store`）。server 已經在跑的話用 `pnpm demo:serve` 跳過 build。
-
-評論頁上那塊「框架 state」是刻意做的：它模擬 Nuxt(Vue) 的 `v-model` 只在收到 `input` 事件時才同步自己的 state，而「送出」送的是 state 而不是 `el.value`。[`writeReviewDraft()`](src/lib/reviewPage.ts) 哪天少了派發事件那一步，這塊就會變紅並顯示送出去的是舊值——這個失敗模式在 jsdom 單元測試裡永遠是綠的。
+評論頁上那塊「框架 state」是刻意做的，用來抓 jsdom 測不到的 Nuxt 雙向綁定失敗（原理見 [ARCHITECTURE 的測試策略](docs/ARCHITECTURE.md#測試策略)）。
 
 ## 專案結構
 
@@ -132,7 +126,7 @@ src/lib/           資料層：內容擷取、商品 / 評論頁偵測、各 AI 
 src/popup/         設定頁面（獨立 extension 頁面，非 Shadow DOM）
 demo/              免安裝本機預覽頁（含 AI API 探測頁）
 scripts/           開發用腳本（demo static server）
-docs/              ARCHITECTURE、隱私權政策、上架文案
+docs/              ARCHITECTURE、WebMCP 設計說明、KKday 實機驗證發現、隱私權政策、上架文案
 ```
 
 各檔案職責與實作細節見 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。

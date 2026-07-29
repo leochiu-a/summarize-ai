@@ -159,5 +159,5 @@ Chrome extension 難測的點在於：真正的環境（真實網站 DOM + 真�
 
 - **真實 AI API 永遠不進 CI。** 需要模型下載（22GB 空間）、硬體門檻、且輸出不決定性。demo 層的 stub 才是決定性的，適合自動化。
 - **demo 頁負責「降級路徑」。** 評論頁的 `?api=` 參數可以模擬「只有 LanguageModel」（＝一般使用者的真實情況）、「Rewriter 也在」、「兩個都沒有」三種環境，不必真的去改 `chrome://flags` 或換機器。這類環境相依的 bug（例如 Rewriter 沒進穩定版）看程式碼是看不出來的。
-- **框架綁定要有「會變紅」的監控。** 見 README 對評論頁那塊「框架 state」的說明。`writeReviewDraft()` 的 native setter + dispatch event 是給 Nuxt(Vue) 看的，jsdom 沒有框架，所以單元測試對它永遠是綠的。
+- **框架綁定要有「會變紅」的監控。** demo 評論頁上那塊「框架 state」是刻意做的：它模擬 Nuxt(Vue) 的 `v-model` 只在收到 `input` 事件時才同步自己的 state，而「送出」送的是 state 而不是 `el.value`。[`writeReviewDraft()`](../src/lib/reviewPage.ts) 的 native setter + dispatch event 就是為了餵這個綁定——哪天少了派發事件那一步，那塊會變紅並顯示送出去的是舊值。jsdom 沒有框架，所以單元測試對這個失敗模式永遠是綠的。
 - **selector 是最脆弱的地方。** [`getReviewTextarea()`](../src/lib/reviewPage.ts) 目前用「placeholder 關鍵字 → 退回第一個 textarea」的通用寫法。要真正防漂移，得把真實評論頁的 DOM 片段存成 fixture 讓單元測試對它跑（尚未做，需要登入的訂單頁才抓得到）。
