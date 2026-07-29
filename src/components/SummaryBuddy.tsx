@@ -60,8 +60,9 @@ export function SummaryBuddy({
   const onStart = useCallback(() => void summ.summarize(), [summ])
   const onRerun = useCallback(() => void summ.summarize({ force: true }), [summ])
 
-  // 邀請文字逐字打出來；非 idle 時餵空字串讓打字機停下
-  const typedPrompt = useTypewriter(idle ? IDLE_PROMPT : '')
+  // 邀請文字逐字打出來。條件要含 opened：泡泡還沒展開就開始打的話，使用者點開時
+  // 這句早就打完了（元件一掛載 phase 就是 idle），逐字效果等於沒有。
+  const typedPrompt = useTypewriter(opened && idle ? IDLE_PROMPT : '')
 
   return (
     <BuddyBubble

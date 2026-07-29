@@ -56,7 +56,16 @@ export function ProductSummaryCard() {
         </div>
       )}
 
-      {phase === 'error' && <div className="ps-error">{error}</div>}
+      {/* 失敗了要留一條路回去：使用者已經按過一次按鈕，不該只剩一行錯誤訊息、只能重整整頁 */}
+      {phase === 'error' && (
+        <div className="ps-idle">
+          <p className="ps-error">{error}</p>
+          <button type="button" className="ps-activate" onClick={() => void run()}>
+            <EmojiIcon code="2728" />
+            再試一次
+          </button>
+        </div>
+      )}
 
       {/* 摘要文字：串流中即時更新，完成後定稿 */}
       {data && (phase === 'generating' || phase === 'done') && <p className="ps-raw">{data}</p>}
