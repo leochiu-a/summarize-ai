@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>富士山・河口湖一日遊 | KKday（demo）</title>
+<!--
+  免安裝 extension 的 WebMCP demo 頁。
+
+  這頁做三件事：
+  1. 複製 KKday 一日遊 PDP 的 DOM 形狀（含 JSON-LD、四個 info-section、方案卡、評論區）
+  2. 載入 dist/webmcp.js —— 就是實際會注入 kkday.com 的那支 build 產物，不是另一份 code
+  3. 右側面板列出註冊到的 tool，可以直接按下去執行、看到真實輸出與字元數
+
+  ⚠️ 這頁內建一份**最小 WebMCP polyfill**，只在瀏覽器沒有原生 document.modelContext 時才裝，
+  目的是讓你不用開 chrome://flags 也能看 tool 的行為。它不是安全邊界、也不代表原生實作，
+  真的要驗證原生行為請用 --enable-features=WebMCP 或 chrome://flags/#enable-webmcp-testing。
+
+  方案區刻意保留 2026-07-27 走查抓到的 bug：「該日期無法訂購」的方案卡沒有 aria-disabled
+  也沒有 pointer-events:none，所以 check_package_availability 會回 warning。把下面那個
+  「修好方案卡」按鈕按下去，warning 就會消失 —— 這就是這支 tool 的 regression 價值。
+-->
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product",
+ "name":"【東京出發】富士山・河口湖・忍野八海一日遊",
+ "category":"一日遊",
+ "description":"從東京銀座出發，走訪新倉山淺間公園展望台、忍野八海與大石公園，含中文導覽。",
+ "aggregateRating":{"@type":"AggregateRating","ratingValue":4.7,"reviewCount":14563,"bestRating":5},
+ "offers":{"@type":"AggregateOffer","lowPrice":1234,"highPrice":2580,"priceCurrency":"TWD",
+   "offers":[{"@type":"Offer","name":"兩人同行優惠","price":1234,"availability":"https://schema.org/InStock"},
+             {"@type":"Offer","name":"冬春季限定","price":1580,"availability":"https://schema.org/OutOfStock"},
+             {"@type":"Offer","name":"9 人座私人包團","price":2580,"availability":"https://schema.org/SoldOut"}]}}
+</script>
+<style>
+  :root { --line: #e3e6ea; --muted: #6b7280; --ink: #1f2933; --accent: #ff5b00; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.7 -apple-system, "Noto Sans TC", sans-serif; color: var(--ink);
+         display: grid; grid-template-columns: minmax(0,1fr) 420px; }
+  main { padding: 28px 32px 120px; min-width: 0; }
+  h1 { font-size: 24px; line-height: 1.4; margin: 0 0 8px; }
+  .score { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .info-section { border-top: 1px solid var(--line); padding: 22px 0; }
+  .info-title { font-size: 18px; margin: 0 0 12px; }
+  .info-section p { margin: 0; color: #3d4852; }
+  .dates { display: flex; gap: 8px; margin-bottom: 16px; }
+  .date-chip { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
+  .date-chip.selected { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .date-chip[aria-disabled="true"] { color: #b6bcc4; background: #f6f7f9; cursor: not-allowed; }
+  .pkg { border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .pkg-name { font-size: 16px; margin: 0 0 6px; }
+  .pkg p { font-size: 14px; color: var(--muted); margin: 0 0 10px; }
+  .pkg-foot { display: flex; align-items: center; gap: 12px; }
+  .price { font-weight: 700; color: var(--accent); }
+  .badge { font-size: 13px; background: #f1f2f4; color: #8a919a; padding: 3px 8px; border-radius: 6px; }
+  .pkg button { margin-left: auto; padding: 8px 20px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  .pkg.blocked button { background: #cfd4da; }
+  .pkg.fixed button { pointer-events: none; }
+  .ai { background: #f7f4ff; border-radius: 10px; padding: 14px; font-size: 14px; margin-bottom: 14px; }
+  .aspects { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .aspects button { padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+  .product-comment-content { border-top: 1px solid #f1f2f4; padding: 12px 0; }
+  .product-comment-content__title { font-weight: 700; font-size: 14px; }
+  .product-comment-content__body { font-size: 14px; color: #3d4852; }
+
+  aside { position: sticky; top: 0; height: 100vh; overflow: auto; border-left: 1px solid var(--line);
+          background: #0f1420; color: #d7dce5; padding: 20px; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  aside h2 { font-size: 14px; margin: 0 0 4px; color: #fff; font-family: -apple-system, sans-serif; }
+  aside .sub { color: #7c8798; margin-bottom: 16px; }
+  .tool { border: 1px solid #26304a; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: #151b2b; }
+  .tool-head { display: flex; align-items: center; gap: 8px; }
+  .tool-name { color: #8ce99a; font-weight: 700; }
+  .flag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #26304a; color: #9fb0cc; }
+  .flag.write { background: #5a2230; color: #ffb3c1; }
+  .tool-desc { color: #8d99ad; margin: 6px 0 8px; white-space: pre-wrap; }
+  .tool button, .fix { background: #2b3a5c; color: #d7dce5; border: 0; border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  .tool input, .tool select { background: #0b0f18; color: #d7dce5; border: 1px solid #26304a; border-radius: 6px; padding: 4px 8px; font: inherit; }
+  pre { white-space: pre-wrap; word-break: break-all; background: #0b0f18; border: 1px solid #26304a;
+        border-radius: 6px; padding: 8px; margin: 8px 0 0; max-height: 260px; overflow: auto; }
+  .len { color: #ffd43b; }
+  .warn { color: #ff8787; }
+  .ok { color: #8ce99a; }
+</style>
+</head>
+<body>
+<main>
+  <h1>【東京出發】富士山・河口湖・忍野八海一日遊</h1>
+  <div class="score">⭐ 4.7（14,563 則評論）・已售出 300K+　商品編號 #25703</div>
+
+  <div class="info-section">
+    <h2 class="info-title">商品說明</h2>
+    <p>從東京銀座出發，一天走完富士山周邊經典路線：先到新倉山淺間公園展望台，在忠靈塔前拍下五重塔與富士山同框的畫面；接著前往忍野八海，看八個由富士山雪水滲流形成的湧泉池；午後在大石公園沿河口湖北岸散步，晴天可見完整湖光山色倒影。全程配置中文導覽，13 人小巴，含車上飲用水。行程約 10 小時，回程於銀座解散。旺季週末與日本公共假期交通壅塞，實際回程時間可能延後。</p>
+  </div>
+
+  <div class="info-section">
+    <h2 class="info-title">購買須知</h2>
+    <p>本行程為併團出發，最低成團人數 4 人，未達人數將於出發前 3 天通知並全額退款。集合時間為 07:50，逾時未到視為自願棄權，恕不退款。行程順序可能因當日路況、天候與季節性道路封閉調整，我司不承擔因此產生的任何損失。富士山五合目在冬季可能因積雪封路，屆時將改為其他景點，不另退費。車上禁止飲食氣味濃重的食物。恕不接受攜帶寵物。孕婦、行動不便者與 3 歲以下幼童請事先告知，未告知而現場無法上車者不予退款。所選日期 1 天（含）之前取消，未使用可免費取消；所選日期 0 ~ 0 天之間取消，不可取消、更改訂單。退款作業需供應商確認，約需 2 至 5 個工作日，款項將於確認後 15 天內退回原付款方式。</p>
+  </div>
+
+  <div class="info-section">
+    <h2 class="info-title">如何使用</h2>
+    <p>訂購完成後，憑證將寄送至您的電子信箱，也可於「我的訂單」下載。出發當日請於 07:50 前抵達銀座東急廣場前集合點，向舉牌的導遊出示電子憑證上的 QR code 完成報到。憑證僅限所選日期當天有效，逾期作廢。</p>
+  </div>
+
+  <div class="info-section">
+    <h2 class="info-title">常見問題</h2>
+    <p>Q：可以帶行李箱嗎？A：車上空間有限，僅接受隨身背包，大型行李請寄放。Q：可以指定座位嗎？A：座位由現場統一安排，恕不接受指定。Q：下雨會取消嗎？A：小雨照常出發，僅在氣象單位發布警報時取消並全額退款。</p>
+  </div>
+
+  <div class="info-section" id="package-sec">
+    <h2 class="info-title">選擇方案</h2>
+    <div class="dates">
+      <button class="date-chip selected">7月28 週二</button>
+      <button class="date-chip">7月29 週三</button>
+      <button class="date-chip" aria-disabled="true">7月31 週五</button>
+    </div>
+
+    <div class="pkg">
+      <h3 class="pkg-name">【兩人同行優惠】富士山河口湖一日遊</h3>
+      <p>含中文導覽・行程時間 10 小時・2 天前可免費取消</p>
+      <div class="pkg-foot"><span class="price">NT$1,234</span><button>選擇</button></div>
+    </div>
+
+    <!-- 走查抓到的 bug：標了「該日期無法訂購」，卡片卻沒有任何 disabled 訊號 -->
+    <div class="pkg blocked" id="blocked-pkg">
+      <h3 class="pkg-name">【冬春季限定】富士山雪景一日遊</h3>
+      <p>冬春季出發・含中文導覽</p>
+      <div class="pkg-foot"><span class="badge">該日期無法訂購</span><span class="price">NT$1,580</span><button>選擇</button></div>
+    </div>
+
+    <div class="pkg">
+      <h3 class="pkg-name">【包車】9 人座私人包團</h3>
+      <p>私人包團・中文司機導遊全程陪同</p>
+      <div class="pkg-foot"><span class="price">NT$2,580</span><button>已售罄</button></div>
+    </div>
+  </div>
+
+  <div class="info-section" id="review-sec">
+    <h2 class="info-title">評論</h2>
+    <div class="ai">✨AI 精選旅客評論摘要：多數旅客認為富士山展望台與忍野八海的景色值得，導遊解說細心、時間掌控好評居多。分歧點集中在車程：部分旅客覺得來回近 5 小時偏長、每站自由活動時間偏短；也有人反映午餐自費選擇不多。建議帶現金、穿好走的鞋，並接受行程可能因天候調整。</div>
+    <div class="aspects">
+      <button>導遊</button><button>景點</button><button>行程</button><button>餐點</button><button>服務</button>
+      <button>翻譯所有評論</button>
+    </div>
+    <div class="product-comment-content">
+      <div class="product-comment-content__title">導遊很棒，值得早起</div>
+      <div class="product-comment-content__body">早上七點五十集合有點硬，但天氣好的時候忠靈塔那個角度真的無敵。導遊會提前提醒下車拍照時間。</div>
+    </div>
+    <div class="product-comment-content">
+      <div class="product-comment-content__title">車程真的長</div>
+      <div class="product-comment-content__body">風景沒問題，但來回車上時間加起來將近五小時，每個點只停 40 分鐘左右，走馬看花。</div>
+    </div>
+    <div class="product-comment-content">
+      <div class="product-comment-content__title">忍野八海超美</div>
+      <div class="product-comment-content__body">水真的清到不可思議。午餐是自費，附近選擇不多，建議自己先買好。</div>
+    </div>
+  </div>
+</main>
+
+<aside>
+  <h2>WebMCP tool 檢視器</h2>
+  <div class="sub" id="status">偵測中…</div>
+  <div class="sub" style="margin-bottom:12px">check_package_availability 試試 <code>date = 2026-08-15</code> —— 應該看到「冬春季限定」訂不到。</div>
+  <button class="fix" id="fix">修好「該日期無法訂購」方案卡（加 aria-disabled）</button>
+  <div id="tools" style="margin-top:16px"></div>
+</aside>
+
+<script>
+// ── 最小 WebMCP polyfill（只在沒有原生實作時安裝）──────────────────
+// 對齊現行 spec：document.modelContext / registerTool(tool, {signal}) / getTools() 回傳的
+// inputSchema 是 **JSON 字串** / executeTool(tool, jsonArgsString)。
+// 不是安全邊界，只為了在沒開 flag 的瀏覽器上也能看到 tool 行為。
+(function () {
+  var native = document.modelContext || navigator.modelContext
+  if (native) { window.__WEBMCP_NATIVE__ = true; return }
+  window.__WEBMCP_NATIVE__ = false
+
+  var registry = new Map()
+  var target = new EventTarget()
+  var mc = {
+    ontoolchange: null,
+    addEventListener: target.addEventListener.bind(target),
+    removeEventListener: target.removeEventListener.bind(target),
+    dispatchEvent: target.dispatchEvent.bind(target),
+    registerTool: function (tool, options) {
+      options = options || {}
+      if (!tool || !tool.name || !tool.description) {
+        return Promise.reject(Object.assign(new Error('name / description 不可為空'), { name: 'InvalidStateError' }))
+      }
+      if (!/^[A-Za-z0-9_.\-]{1,128}$/.test(tool.name)) {
+        return Promise.reject(Object.assign(new Error('name 含非法字元'), { name: 'InvalidStateError' }))
+      }
+      if (registry.has(tool.name)) {
+        return Promise.reject(Object.assign(new Error('同名 tool 已註冊'), { name: 'InvalidStateError' }))
+      }
+      registry.set(tool.name, tool)
+      if (options.signal) options.signal.addEventListener('abort', function () {
+        registry.delete(tool.name)
+        target.dispatchEvent(new Event('toolchange'))
+      })
+      target.dispatchEvent(new Event('toolchange'))
+      return Promise.resolve()
+    },
+    getTools: function () {
+      return Promise.resolve([].concat(Array.from(registry.values())).map(function (t) {
+        return {
+          name: t.name, title: t.title, description: t.description,
+          inputSchema: t.inputSchema ? JSON.stringify(t.inputSchema) : undefined,
+          annotations: t.annotations, origin: location.origin, window: window,
+        }
+      }).sort(function (a, b) { return a.name.localeCompare(b.name) }))
+    },
+    executeTool: function (registered, jsonArgs) {
+      var tool = registry.get(registered.name)
+      if (!tool) return Promise.reject(new Error('tool 不存在（可能已隨路由變更被註銷）'))
+      return Promise.resolve(tool.execute(JSON.parse(jsonArgs || '{}')))
+    },
+  }
+  Object.defineProperty(Document.prototype, 'modelContext', { get: function () { return mc }, configurable: true })
+})()
+</script>
+
+<script>
+// ── 可訂性 API 與 __NUXT__ 的 stub ─────────────────────────────────────
+// `check_package_availability` 已改成打站方的可訂性 API，並從 `window.__NUXT__` 取
+// pkgOid / itemOidList。demo server 兩個都沒有，所以這裡照實機觀察到的形狀 stub 一份。
+//
+// 刻意讓第 4 個方案（冬春季限定）**整個 8 月都不可訂** —— 那正是實機抓到的狀況：
+// 畫面上它是可點的 chip、沒有任何 badge，但 API 說整月訂不到。這頁就是要演示這件事。
+window.__NUXT__ = {
+  state: { product: { packages: [
+    { pkg_oid: 1964950, name: '【兩人同行優惠】富士山河口湖一日遊', items: [1710727] },
+    { pkg_oid: 1986735, name: '【冬春季限定】富士山雪景一日遊',   items: [1212306] },
+    { pkg_oid: 1466529, name: '【包車】9 人座私人包團',            items: [1710800] },
+  ] } },
+}
+
+const FULLY_BLOCKED = 1986735          // 整月不可訂的那個方案
+const SOLD_OUT_DAYS = ['2026-08-06', '2026-08-08', '2026-08-18']
+
+// 防護：某些環境（例如 jsdom 檢查腳本）沒有 window.fetch，直接 .bind 會 throw
+// 並讓整段 stub 失效 —— 那會讓 check_package_availability 靜默拿不到資料。
+const nativeFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null
+window.fetch = function (input, init) {
+  const url = String(input?.url ?? input)
+  if (!url.includes('/api/_nuxt/product/fetch-items-data')) {
+    if (!nativeFetch) return Promise.reject(new Error('這個環境沒有 fetch'))
+    return nativeFetch(input, init)
+  }
+
+  const q = new URL(url, location.origin).searchParams
+  const pkgOid = Number(q.get('pkgOid'))
+  const itemOid = q.get('itemOidList[]')
+  // itemOidList[] 是必填 —— 實機少了它會回 500，這裡照做，才測得到錯誤處理
+  if (!itemOid) return Promise.resolve(makeResponse('{}', 500))
+
+  const begin = q.get('beginDate'), end = q.get('endDate')
+  const calendar = {}
+  for (let d = new Date(begin + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10)
+    const blocked = pkgOid === FULLY_BLOCKED || SOLD_OUT_DAYS.includes(iso)
+    calendar[iso] = {
+      date: iso,
+      is_saleable: !blocked,
+      is_sold_out: false,
+      can_be_start: !blocked,
+      can_be_end: false,
+      is_discounted: false,
+      remain_qty: blocked ? {} : { fullday: 37 + (pkgOid % 7) },
+      events: [],
+    }
+  }
+  return Promise.resolve(makeResponse(JSON.stringify({ status: 200, message: 'ok', data: { [itemOid]: { calendar } } }), 200))
+}
+
+// 沒有 Response 建構子的環境（jsdom 檢查腳本）用最小替身
+function makeResponse(body, status) {
+  if (typeof Response === 'function') {
+    return new Response(body, { status, headers: { 'content-type': 'application/json' } })
+  }
+  return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(JSON.parse(body)) }
+}
+</script>
+
+<!-- 這支就是實際注入 kkday.com 的 build 產物（server 直接讀 dist/webmcp.js） -->
+<script src="/webmcp.js"></script>
+
+<script>
+// ── 檢視器 UI ────────────────────────────────────────────────
+const mc = document.modelContext
+const statusEl = document.getElementById('status')
+const toolsEl = document.getElementById('tools')
+
+statusEl.innerHTML = window.__WEBMCP_NATIVE__
+  ? '<span class="ok">原生 document.modelContext ✓</span>'
+  : '使用本頁內建 <b>polyfill</b>（沒有偵測到原生實作）<br>要測原生：<code>--enable-features=WebMCP</code>'
+
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+
+async function render() {
+  const tools = await mc.getTools()
+  if (!tools.length) { toolsEl.innerHTML = '<div class="sub">目前這個路徑沒有註冊任何 tool。</div>'; return }
+
+  toolsEl.innerHTML = tools.map((t, i) => {
+    const schema = t.inputSchema ? JSON.parse(t.inputSchema) : null
+    const props = schema?.properties ?? {}
+    const inputs = Object.entries(props).map(([key, def]) => {
+      const control = def.enum
+        ? `<select data-k="${key}">${def.enum.map((v) => `<option>${v}</option>`).join('')}</select>`
+        : `<input data-k="${key}" placeholder="${esc(key)}">`
+      return `<label style="display:block;margin-bottom:6px">${esc(key)} ${control}</label>`
+    }).join('')
+    const ro = t.annotations?.readOnlyHint
+    return `<div class="tool" data-i="${i}">
+      <div class="tool-head">
+        <span class="tool-name">${esc(t.name)}</span>
+        <span class="flag ${ro ? '' : 'write'}">${ro ? 'readOnly' : '會改狀態'}</span>
+        ${t.annotations?.untrustedContentHint ? '<span class="flag">untrusted</span>' : ''}
+      </div>
+      <div class="tool-desc">${esc(t.description)}</div>
+      ${inputs}
+      <button data-run="${i}">執行</button>
+      <pre hidden></pre>
+    </div>`
+  }).join('')
+
+  toolsEl.querySelectorAll('[data-run]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const card = btn.closest('.tool')
+      const pre = card.querySelector('pre')
+      const args = {}
+      card.querySelectorAll('[data-k]').forEach((el) => { if (el.value) args[el.dataset.k] = el.value })
+      pre.hidden = false
+      pre.textContent = '執行中…'
+      try {
+        // 注意 spec：executeTool 第二參數是 JSON **字串**，不是物件
+        const out = await mc.executeTool(tools[Number(btn.dataset.run)], JSON.stringify(args))
+        const text = typeof out === 'string' ? out : JSON.stringify(out, null, 2)
+        const flag = text.length > 1500 ? 'warn' : 'len'
+        pre.innerHTML = `<span class="${flag}">[${text.length} chars / 上限 1500]</span>\n` + esc(text)
+      } catch (err) {
+        pre.innerHTML = `<span class="warn">${esc(err.name + ': ' + err.message)}</span>`
+      }
+    })
+  })
+}
+
+mc.addEventListener('toolchange', render)
+render()
+
+// 把「不可訂卻可點」修好，看 check_package_availability 的 warning 消失
+document.getElementById('fix').addEventListener('click', () => {
+  const pkg = document.getElementById('blocked-pkg')
+  pkg.classList.add('fixed')
+  pkg.querySelector('button').setAttribute('aria-disabled', 'true')
+  document.getElementById('fix').textContent = '已修好 —— 重新執行 check_package_availability 看看'
+})
+</script>
+</body>
+</html>

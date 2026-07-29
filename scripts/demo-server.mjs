@@ -30,10 +30,16 @@ const MIME = {
 
 // 把 URL 對應到實際檔案。回傳 null = 404。
 function resolveFile(pathname) {
-  // content script 直接從 build 產物拿，不用複製到 demo/
-  if (pathname === '/content.js') {
-    const built = join(ROOT, 'dist', 'content.js')
+  // content script 與 WebMCP 註冊層都直接從 build 產物拿，不用複製到 demo/
+  if (pathname === '/content.js' || pathname === '/webmcp.js') {
+    const built = join(ROOT, 'dist', pathname.slice(1))
     return existsSync(built) ? built : null
+  }
+
+  // 商品頁：真實網址是 /product/<id>（可帶 /zh-tw 前綴）。
+  // WebMCP 的 tool 全靠 isProductPage() 決定要不要註冊，所以路徑形狀必須對。
+  if (/^(\/[a-z]{2}-[a-z]{2})?\/product\/\d+(-[\w-]+)?\/?$/i.test(pathname)) {
+    return join(DEMO, 'product.html')
   }
 
   // 評論撰寫頁：真實網址是 /order/comment/<訂單編號>（可帶 /zh-tw 前綴），
@@ -58,8 +64,8 @@ const server = createServer((req, res) => {
   if (!file) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
     res.end(
-      pathname === '/content.js'
-        ? '找不到 dist/content.js —— 先跑 pnpm run build'
+      pathname === '/content.js' || pathname === '/webmcp.js'
+        ? `找不到 dist${pathname} —— 先跑 pnpm run build`
         : `404 ${pathname}`,
     )
     return
@@ -79,6 +85,7 @@ server.listen(PORT, () => {
   console.log(`${at('/')}                      文章頁（整頁摘要）`)
   console.log(`${at('/homepage')}              非文章頁（垃圾過濾）`)
   console.log(`${at('/order/comment/25KK268720222')}  評論撰寫頁（潤飾）`)
+  console.log(`${at('/zh-tw/product/12319')}     商品頁 + WebMCP tool 檢視器`)
   console.log(`${at('/probe')}                 內建 AI API 探測（不 stub，看真實環境）`)
   console.log('\n改完程式：另一個 terminal 跑 pnpm dev，然後重新整理即可（無快取）。')
 })
