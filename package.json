@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "vp test run",
-    "build": "vp build && vp build --config vite.popup.config.ts",
-    "dev": "rm -rf dist && DEV_WATCH=1 sh -c 'vp build --watch & vp build --watch --config vite.popup.config.ts & wait'",
+    "build": "vp build && vp build --config vite.popup.config.ts && vp build --config vite.webmcp.config.ts",
+    "dev": "rm -rf dist && DEV_WATCH=1 sh -c 'vp build --watch & vp build --watch --config vite.popup.config.ts & vp build --watch --config vite.webmcp.config.ts & wait'",
     "demo": "vp build && node scripts/demo-server.mjs",
     "demo:serve": "node scripts/demo-server.mjs",
     "typecheck": "tsc --noEmit",

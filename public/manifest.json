@@ -9,6 +9,12 @@
       "matches": ["*://kkday.com/*", "*://*.kkday.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://kkday.com/*", "*://*.kkday.com/*"],
+      "js": ["webmcp.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
     }
   ],
   "action": {
