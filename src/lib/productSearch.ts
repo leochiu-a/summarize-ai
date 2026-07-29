@@ -124,10 +124,14 @@ export interface SearchResult {
   fetchDiagnostic?: string
 }
 
+/**
+ * 數字正規化。字串路徑要留住負號 —— `[^\d.]` 會把 `-` 一起吃掉，讓 `'-88'` 變成 `88`，
+ * 於是髒資料從「明顯錯誤的負值」變成「看起來正常的正值」。這比直接壞掉更難發現。
+ */
 function num(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   if (typeof v === 'string') {
-    const n = Number(v.replace(/[^\d.]/g, ''))
+    const n = Number(v.replace(/[^\d.-]/g, ''))
     return Number.isFinite(n) ? n : undefined
   }
   return undefined
@@ -273,10 +277,17 @@ function matches(hit: SearchHit, q: SearchQuery): boolean {
   return true
 }
 
+/** 沒有值的一律排到最後，且兩邊都沒有時回 0 —— comparator 回 NaN 的排序結果未定義 */
+function byAsc(a: number | undefined, b: number | undefined): number {
+  const av = a ?? Infinity
+  const bv = b ?? Infinity
+  return av === bv ? 0 : av - bv
+}
+
 function sortHits(hits: SearchHit[], sort: SortId): SearchHit[] {
   const out = [...hits]
   if (sort === 'rating') out.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
-  else if (sort === 'price_low') out.sort((a, b) => (a.priceFrom ?? Infinity) - (b.priceFrom ?? Infinity))
+  else if (sort === 'price_low') out.sort((a, b) => byAsc(a.priceFrom, b.priceFrom))
   else if (sort === 'most_ordered') out.sort((a, b) => (orderCount(b.ordered) ?? 0) - (orderCount(a.ordered) ?? 0))
   return out // 'recommended' = 沿用 API 順序
 }
@@ -295,10 +306,25 @@ export async function searchProducts(q: SearchQuery): Promise<SearchResult> {
   const diagnostics: string[] = []
   let truncated = false
   let total: number | undefined
+  // 逐頁 catch：第 2 頁失敗不該把第 1 頁已經拿到的結果一起丟掉。
+  // 這不是假想情境 —— 站方的限流是實測過的行為，而且它回的是 HTTP 200 + 非預期格式，
+  // 也就是會走到 fetchPage 的 throw。一次搜尋預設要打 3 頁，中途掛掉是預期會發生的。
   for (let page = 1; page <= maxPages; page += 1) {
-    const { items, total: t, diagnostic } = await fetchPage(q.keyword, page)
-    if (page === 1) total = t
-    diagnostics.push(`p${page}: ${diagnostic}`)
+    let items: Record<string, unknown>[]
+    try {
+      const r = await fetchPage(q.keyword, page)
+      items = r.items
+      if (page === 1) total = r.total
+      diagnostics.push(`p${page}: ${r.diagnostic}`)
+    } catch (err) {
+      // 第 1 頁就失敗 = 完全取不到資料，維持 throw：呼叫端要能區分「取不到」與「取到但沒符合的」。
+      if (page === 1) throw err
+      // 第 2 頁之後失敗 → 保留已經拿到的頁，誠實標註範圍不完整
+      diagnostics.push(`p${page}: 失敗（${(err as Error).message}）`)
+      notes.push(`第 ${page} 頁抓取失敗，以下結果只涵蓋前 ${page - 1} 頁的候選，不是完整範圍。`)
+      truncated = true
+      break
+    }
     raw.push(...items)
     if (items.length < PAGE_SIZE) break // 不足一頁 = 到底了
     if (page === maxPages) truncated = true

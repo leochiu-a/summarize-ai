@@ -219,21 +219,14 @@ const discoveryTools: ModelContextTool[] = [
   },
 ]
 
-// B. 決策支援 —— 只在商品頁註冊。
-//
-// 這幾支的定位要講清楚：它們不是「下單流程的 tool」，而是 discovery 的**第二段**。
-// 「找到適合的商品」包含「確認這個真的適合我」，而那件事是 9,000–12,000 字沒人會讀的條文、
-// 一個只存在畫素裡的可訂性矩陣，和 14,563 則只露 10 則的評論。收斂 584→5 和收斂
-// 12,000 字→「這個適合你嗎」是同一件事的兩個尺度。
 // B. 可訂性 —— 只在商品頁註冊。
 //
 // 這是 benchmark 之後唯一留下來的 PDP tool，理由是它**不是在包裝 DOM 資料**：對照組為了
 // 確認一個商品在 8/15 能不能訂，必須點方案 → 開日曆 → 截圖判讀，而可訂性矩陣（日期 × 方案）
 // 在頁面上只存在於畫素裡。這正是「取代多步互動」，跟 search 同一類價值。
 //
-// ⚠️ 但現在的實作仍是讀 DOM badge，所以使用者沒在 UI 上選日期時 `selectedDate` 為 null，
-// 它就答不了任何特定日期的問題 —— 實測 agent 因此只能誠實說「我無法確認 8/15 有沒有位」。
-// 待辦：改成打站方的可訂性 API，才能真正取代那串點擊。
+// 資料來源是站方自己的可訂性 API（見 packageCalendar.ts），所以**不需要使用者先在頁面上
+// 選日期**；讀 DOM 的 packageAvailability 只留著做交叉檢核（API 說不可訂、畫面卻可點）。
 const productTools: ModelContextTool[] = [
   {
     name: 'check_package_availability',
@@ -276,6 +269,11 @@ const productTools: ModelContextTool[] = [
             date: result.date,
             bookable: result.bookable.map((b) => ({ package: b.name ?? String(b.pkgOid), remain: b.remain })),
             notBookable: result.blocked.map((b) => b.name ?? String(b.pkgOid)),
+            // 查不到資料的方案必須跟「確定不可訂」分開列。合在一起的話 agent 會直接告訴
+            // 使用者「這些方案訂不到」，而我們其實沒有任何依據。
+            ...(result.unknown.length
+              ? { couldNotCheck: result.unknown.map((b) => b.name ?? String(b.pkgOid)) }
+              : {}),
             notes: [...result.notes, ...domWarnings],
           })
         }

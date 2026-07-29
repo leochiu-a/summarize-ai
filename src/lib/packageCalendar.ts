@@ -52,8 +52,14 @@ export interface DayAvailability {
   date: string
   saleable: boolean
   soldOut: boolean
-  /** 剩餘數量，key 依商品型態而異（實測全日型是 `fullday`）。頁面上看不到這個 */
-  remain?: Record<string, number>
+  /**
+   * 剩餘數量，**依 item（票種）分開保留**：外層 key 是 itemOid，內層 key 依商品型態而異
+   * （實測全日型是 `fullday`）。頁面上完全看不到這個資訊。
+   *
+   * 刻意不把多個票種加總成一個數字 —— 本層的原則是「只複製不生成」，而且票種之間的庫存
+   * 是否共用尚未確認（已列進給後端的問題清單）。加總會產出一個看起來精確、實際沒有根據的數字。
+   */
+  remain?: Record<string, Record<string, number>>
 }
 
 export interface PackageAvailabilityRange {
@@ -111,8 +117,15 @@ export function readPackagesFromPayload(win: Window & typeof globalThis = window
   return [...found.values()]
 }
 
+/**
+ * 今天（**本地時區**）。
+ *
+ * ⚠️ 不要改回 `toISOString().slice(0, 10)` —— 那是 UTC。台灣（UTC+8）在當地 00:00–08:00
+ * 之間呼叫會拿到昨天，於是預設查詢範圍從一個已經過去的日子起算。`sv-SE` 的日期格式
+ * 剛好就是 `YYYY-MM-DD`，而且走本地時區。
+ */
 function isoToday(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toLocaleDateString('sv-SE')
 }
 
 function addDays(iso: string, days: number): string {
@@ -142,25 +155,25 @@ export async function fetchPackageCalendar(
   const res = await fetch(url, { headers: { accept: 'application/json' }, credentials: 'same-origin' })
   if (!res.ok) throw new Error(`可訂性 API 回 HTTP ${res.status}`)
   const body = (await res.json()) as { data?: Record<string, { calendar?: Record<string, unknown> }> }
-  const items = Object.values(body?.data ?? {})
   // 一個方案可能有多個 item（票種）。可訂性取聯集：任一票種可訂就算該日可訂。
+  // remain 則相反 —— 依 itemOid 分開存，不合併也不加總（見 DayAvailability.remain 的說明）。
   const byDate = new Map<string, DayAvailability>()
-  for (const item of items) {
+  for (const [itemOid, item] of Object.entries(body?.data ?? {})) {
     for (const [date, raw] of Object.entries(item?.calendar ?? {})) {
       const day = raw as Record<string, unknown>
       const saleable = day.is_saleable === true
       const soldOut = day.is_sold_out === true
       const prev = byDate.get(date)
-      const merged: DayAvailability = {
+      const remain =
+        typeof day.remain_qty === 'object' && day.remain_qty !== null
+          ? { ...prev?.remain, [itemOid]: day.remain_qty as Record<string, number> }
+          : prev?.remain
+      byDate.set(date, {
         date,
         saleable: (prev?.saleable ?? false) || saleable,
         soldOut: prev ? prev.soldOut && soldOut : soldOut,
-        remain:
-          typeof day.remain_qty === 'object' && day.remain_qty !== null
-            ? (day.remain_qty as Record<string, number>)
-            : prev?.remain,
-      }
-      byDate.set(date, merged)
+        remain,
+      })
     }
   }
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
@@ -246,18 +259,33 @@ export async function readAvailabilityMatrix(options: MatrixOptions = {}): Promi
   return { from, to, packages: out, notes }
 }
 
-/** 查單一日期能訂哪些方案。回傳含剩餘數量。 */
+interface PackageRef {
+  pkgOid: number
+  name?: string
+}
+
+/**
+ * 查單一日期能訂哪些方案。回傳含剩餘數量。
+ *
+ * ⚠️ **「不可訂」與「查不到」是兩件事，不可以合併。** API 沒有回這一天的 calendar entry
+ * （超出開賣區間、當日無場次、或回了空 calendar）時，我們知道的是「沒有資料」，不是
+ * 「訂不到」。把後者當成前者回報，agent 就會自信地告訴使用者某個方案訂不到 —— 這正是
+ * 這一整層想避免的失敗模式（見檔頭：畫面會說謊）。所以第三類 `unknown` 要獨立存在。
+ */
 export async function checkDate(date: string): Promise<{
   date: string
-  bookable: { pkgOid: number; name?: string; remain?: Record<string, number> }[]
-  blocked: { pkgOid: number; name?: string }[]
+  bookable: (PackageRef & { remain?: Record<string, Record<string, number>> })[]
+  blocked: PackageRef[]
+  /** 查不到該日期資料的方案。**不代表不可訂**，只代表我們沒有依據 */
+  unknown: PackageRef[]
   notes: string[]
 } | null> {
   const packages = readPackagesFromPayload()
   if (!packages.length) return null
 
-  const bookable: { pkgOid: number; name?: string; remain?: Record<string, number> }[] = []
-  const blocked: { pkgOid: number; name?: string }[] = []
+  const bookable: (PackageRef & { remain?: Record<string, Record<string, number>> })[] = []
+  const blocked: PackageRef[] = []
+  const unknown: PackageRef[] = []
   const notes: string[] = []
   const targets = packages.slice(0, MAX_PACKAGES)
 
@@ -265,12 +293,15 @@ export async function checkDate(date: string): Promise<{
     try {
       const days = await fetchPackageCalendar(pkg, date, date)
       const day = days.find((d) => d.date === date)
-      if (day && day.saleable && !day.soldOut) {
+      if (!day) {
+        unknown.push({ pkgOid: pkg.pkgOid, name: pkg.name })
+      } else if (day.saleable && !day.soldOut) {
         bookable.push({ pkgOid: pkg.pkgOid, name: pkg.name, remain: day.remain })
       } else {
         blocked.push({ pkgOid: pkg.pkgOid, name: pkg.name })
       }
     } catch (err) {
+      unknown.push({ pkgOid: pkg.pkgOid, name: pkg.name })
       notes.push(`方案 ${pkg.pkgOid} 查詢失敗：${(err as Error).message}`)
     }
     if (i < targets.length - 1) await new Promise((r) => setTimeout(r, REQUEST_DELAY_MS))
@@ -281,8 +312,17 @@ export async function checkDate(date: string): Promise<{
       `${blocked.length} 個方案在 ${date} 不可訂。⚠️ 畫面上這些方案通常仍是可點的，主動告知使用者比讓他自己試好。`,
     )
   }
-  if (bookable.some((b) => b.remain)) {
-    notes.push('remain 是剩餘可訂數量。這個資訊頁面上不會顯示，轉述時可以講，但不要當成保證（庫存隨時變動）。')
+  if (unknown.length) {
+    notes.push(
+      `${unknown.length} 個方案查不到 ${date} 的資料（API 沒有回這天）。⚠️ 這**不等於不可訂**，只代表沒有依據 —— ` +
+        `不要告訴使用者這些方案訂不到，請他到頁面上自行確認。`,
+    )
   }
-  return { date, bookable, blocked, notes }
+  if (bookable.some((b) => b.remain)) {
+    notes.push(
+      'remain 是剩餘可訂數量，外層 key 是票種 id。這個資訊頁面上不會顯示，轉述時可以講，' +
+        '但不要當成保證（庫存隨時變動），也不要把多個票種的數字加總。',
+    )
+  }
+  return { date, bookable, blocked, unknown, notes }
 }

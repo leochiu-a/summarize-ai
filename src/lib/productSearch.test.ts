@@ -164,6 +164,29 @@ describe('searchProducts — 分頁', () => {
     await expect(searchProducts({ keyword: '東京' })).rejects.toThrow('參數錯誤')
   })
 
+  // code review 抓到的 Important：原本整個迴圈沒有 catch，第 2 頁失敗會讓整支 throw，
+  // 第 1 頁已經拿到的 20 筆一起丟掉。而站方限流是實測過的行為（回 200 + 非預期格式）。
+  it('第 2 頁失敗時保留第 1 頁的結果，並標註範圍不完整', async () => {
+    let page = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        page += 1
+        if (page === 1) {
+          return {
+            ok: true,
+            json: async () => ({ data: { data: fullPage(), total: 590 } }),
+          } as unknown as Response
+        }
+        return { ok: false, status: 429 } as unknown as Response
+      }),
+    )
+    const r = await searchProducts({ keyword: '東京' })
+    expect(r.scanned).toBe(PAGE_SIZE) // 第 1 頁沒有被丟掉
+    expect(r.truncated).toBe(true)
+    expect(r.notes.some((n) => n.includes('第 2 頁抓取失敗'))).toBe(true)
+  })
+
   it('API 回空陣列時，明講「不是條件太嚴」並附上診斷', async () => {
     // scanned:0 與 matched:0 是完全不同的失敗。混在一起的代價實測過：
     // agent 以為條件太嚴、放寬重試還是 0，最後放棄 tool 改去爬 DOM。
@@ -326,6 +349,20 @@ describe('searchProducts — 排序與筆數', () => {
     expect((await searchProducts({ keyword: 'k', sort: 'most_ordered' })).hits.map((h) => h.id)).toEqual(['cheap', 'mid', 'top'])
     // 所有排序都只呼叫同一個已驗證的 sort=prec
     expect(new Set(calls.map((c) => new URL(c, 'https://www.kkday.com').searchParams.get('sort')))).toEqual(new Set(['prec']))
+  })
+
+  // code review 抓到的 Minor：`(a ?? Infinity) - (b ?? Infinity)` 在兩邊都沒有價格時
+  // 回 NaN，而 comparator 回 NaN 的排序結果在規格上是 implementation-defined。
+  it('price_low 遇到整批都沒有價格時不會產生 NaN comparator', async () => {
+    const items = [
+      apiItem({ prod_oid: 'a', min_price: undefined, max_price: undefined }),
+      apiItem({ prod_oid: 'b', min_price: undefined, max_price: undefined }),
+      apiItem({ prod_oid: 'c', min_price: 500 }),
+    ]
+    mockApi([items])
+    const hits = (await searchProducts({ keyword: 'k', sort: 'price_low' })).hits
+    expect(hits[0].id).toBe('c') // 有價格的排最前
+    expect(hits.map((h) => h.id).sort()).toEqual(['a', 'b', 'c']) // 沒有任何一筆消失
   })
 
   // 迴歸測試：把「API 沒回資料」與「回了但解析全失敗」講成同一句話，

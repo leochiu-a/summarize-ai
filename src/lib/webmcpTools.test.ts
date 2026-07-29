@@ -291,8 +291,27 @@ describe('check_package_availability（改打可訂性 API）', () => {
     })
     const out = JSON.parse(await run('check_package_availability', { date: '2026-08-15' }))
     expect(out.productId).toBe('12319')
-    expect(out.bookable).toEqual([{ package: '【兩人同行優惠】河口湖散步方案', remain: { fullday: 41 } }])
+    // remain 依票種（itemOid）分開保留，不加總 —— 見 DayAvailability.remain
+    expect(out.bookable).toEqual([
+      { package: '【兩人同行優惠】河口湖散步方案', remain: { 1710727: { fullday: 41 } } },
+    ])
     expect(out.notBookable).toEqual(['【冬春季限定】新倉山＋纜車'])
+    expect(out.couldNotCheck).toBeUndefined()
+  })
+
+  // 這是 code review 抓到的 Critical：原本 days.find() 回 undefined 時會落進 else 被當成
+  // 「不可訂」，於是 agent 會自信地告訴使用者某方案訂不到 —— 但我們其實只是沒拿到資料。
+  it('API 沒回該日期的資料時歸到 couldNotCheck，不能說成不可訂', async () => {
+    renderProductPage()
+    stubPayload()
+    stubApi({
+      1964950: { '2026-08-15': day(true, 41) },
+      1986735: {}, // 這個方案 API 完全沒回 8/15 的 entry
+    })
+    const out = JSON.parse(await run('check_package_availability', { date: '2026-08-15' }))
+    expect(out.notBookable).toEqual([])
+    expect(out.couldNotCheck).toEqual(['【冬春季限定】新倉山＋纜車'])
+    expect(out.notes.join('')).toContain('不等於不可訂')
   })
 
   it('不可訂的方案一定附上「畫面上仍可點」的警告 —— 這是循環死巷 bug', async () => {
