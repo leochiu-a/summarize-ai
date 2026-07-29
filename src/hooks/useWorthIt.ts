@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BuddyPhase } from '../lib/buddyPhase'
 import { getProductId } from '../lib/productPage'
 import { readProductFacts } from '../lib/productFacts'
@@ -27,12 +27,27 @@ export function useWorthIt(): WorthIting {
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
 
+  // prepare() 的「這次還算不算有效」計數（同 useSummarizer）：收合或卸載時 +1
+  const genRef = useRef(0)
+
+  // 卸載（SPA 換模式）時：作廢在飛的 prepare，並收掉預熱好的 session
+  useEffect(
+    () => () => {
+      genRef.current += 1
+      releaseWorthIt()
+    },
+    [],
+  )
+
   // 展開泡泡時：有快取直接給結果（不跑模型也不預熱），沒快取才背景預熱 baseline session
   // （Chrome 官方建議〈Prepare the model at a reasonable time〉）
   const prepare = useCallback(async () => {
+    const gen = ++genRef.current
     const { tone } = await getSettings()
     const productId = getProductId() ?? location.pathname
     const cached = await getCachedWorthIt(productId, tone)
+    // 已被收合 / 卸載 → 不要動畫面
+    if (gen !== genRef.current) return
     if (cached) {
       setData(cached)
       setError('')
@@ -42,6 +57,8 @@ export function useWorthIt(): WorthIting {
     }
     // 預熱是機會財：失敗不冒錯誤 UI，真正的錯誤留給 run()
     await prewarmWorthIt(tone).catch(() => {})
+    // 預熱期間被收合 → 這份 session 沒人要了
+    if (gen !== genRef.current) releaseWorthIt()
   }, [])
 
   const run = useCallback(async ({ force = false } = {}) => {
@@ -91,6 +108,7 @@ export function useWorthIt(): WorthIting {
   }, [])
 
   const reset = useCallback(() => {
+    genRef.current += 1 // 讓還在飛的 prepare 失效
     setPhase('idle')
     setData(null)
     setError('')

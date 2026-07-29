@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BuddyPhase } from '../lib/buddyPhase'
 import {
   extractContent,
@@ -37,13 +37,30 @@ export function useSummarizer(): Summarizing {
   const [error, setError] = useState('')
   const [fromCache, setFromCache] = useState(false)
 
+  // prepare() 的「這次還算不算有效」計數。收合泡泡或元件卸載時 +1，讓還在飛的 prepare
+  // 知道自己過期了——它中間有兩個 await（讀設定、查快取），期間使用者可能已經把泡泡收起來。
+  const genRef = useRef(0)
+
+  // 卸載（SPA 換模式）時：作廢在飛的 prepare，並收掉預熱好的 session。
+  // 不能只靠 close()——close 只有「泡泡展開時點頭像」會走到，換頁時不會。
+  useEffect(
+    () => () => {
+      genRef.current += 1
+      releaseSummarizer()
+    },
+    [],
+  )
+
   // 使用者展開泡泡時呼叫（意圖明確、但還沒按下開始）：
   // - 已有快取 → 直接把上次結果放出來，不跑模型也不用預熱
   // - 沒快取 → 背景把 Summarizer 建起來，把 cold start 藏在他讀提示文字的那幾秒
   //   （Chrome 官方建議〈Prepare the model at a reasonable time〉）
   const prepare = useCallback(async () => {
+    const gen = ++genRef.current
     const settings = await getSettings()
     const cached = await getCachedSummary(variantOf(settings))
+    // 已被收合 / 卸載 → 不要動畫面（否則收起來的泡泡會自己彈回來）
+    if (gen !== genRef.current) return
     if (cached) {
       setMarkdown(cached.markdown)
       setError('')
@@ -53,6 +70,8 @@ export function useSummarizer(): Summarizing {
     }
     // 預熱是機會財：失敗不冒錯誤 UI，真正的錯誤留給 summarize()
     await warmSummarizer(createOptions(settings)).catch(() => {})
+    // 預熱期間被收合 → 這份 session 沒人要了，別留著
+    if (gen !== genRef.current) releaseSummarizer()
   }, [])
 
   const summarize = useCallback(async ({ force = false } = {}) => {
@@ -125,6 +144,7 @@ export function useSummarizer(): Summarizing {
   }, [])
 
   const close = useCallback(() => {
+    genRef.current += 1 // 讓還在飛的 prepare 失效，別把收起來的泡泡再打開
     setPhase('idle')
     setMarkdown('')
     setError('')
