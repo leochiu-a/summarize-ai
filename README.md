@@ -16,6 +16,29 @@
 
 第一次用到某個模型時，小夥伴會先徵求同意再下載 Gemini Nano，並顯示下載進度（Chrome 要求模型下載必須由使用者手勢觸發）。
 
+### 另一條實驗性的路：WebMCP tool
+
+上面五個功能都是「我們自己在瀏覽器裡跑一個小模型」。額外還有一層方向相反的東西：把頁面的能力
+**開放給使用者自己帶來的 agent** 呼叫（Gemini in Chrome、透過 `chrome-devtools-mcp` 接進來的
+Claude Code…）。這條路繞開了內建 AI 的兩個硬限制——繁中不在 Gemini Nano 支援語言內、mobile
+完全不支援——因為推論不在我們這邊做。
+
+**只有兩支，而且都是唯讀：**
+
+| tool | 註冊在 | 做什麼 |
+| --- | --- | --- |
+| `search_products` | 全站 | 打 SRP 自己在用的 API，掃 60 筆回 12 筆候選，含評分／評論數／價格區間／最早可出發日 |
+| `check_package_availability` | 商品頁 | 打站方可訂性 API：問單日回逐方案可訂與否 + **剩餘數量**，問範圍回可訂日期清單。**不需要使用者先在頁面上選日期** |
+
+曾經有 7 支，[benchmark](docs/webmcp-benchmark.md) 之後砍到 2 支：**WebMCP 省的是「跨頁抓取與
+多步互動」，不是「包裝單頁資料」。**商品頁那 12,000 字本來就 100% SSR、一次在 DOM 裡，包成 tool
+實測反而更貴，所以 `get_product_terms` / `get_product_facts` / `get_product_reviews` 與
+`read/write_review_draft` 全部移除。**沒有任何會改狀態的 tool，也沒有送出訂單或付款的 tool。**
+
+要跑起來：Chrome 需開 `chrome://flags/#enable-webmcp-testing`（WebMCP 目前是 origin trial；
+實測 Chrome 151 原生已可用）。不想開 flag 就跑 `pnpm demo` 開 `/zh-tw/product/12319`，那頁自帶
+polyfill 與 tool 檢視器。設計理由與限制見 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+
 ## 需求
 
 - **Chrome 138+**（內建 AI API 已進穩定版）
@@ -85,6 +108,7 @@ pnpm demo
 | `/` | 文章頁（整頁摘要） |
 | `/homepage` | 非文章頁（框架垃圾過濾） |
 | `/order/comment/25KK268720222` | 評論撰寫頁（潤飾）。`?api=prompt`（預設，走 Prompt fallback）/ `?api=rewriter` / `?api=none` 可切換 stub 的 API 組合 |
+| `/zh-tw/product/12319` | 商品頁 + **WebMCP tool 檢視器**。列出註冊到的 tool，可直接執行看真實輸出與字元數；沒有原生 `document.modelContext` 時自動裝一份最小 polyfill。頁上「修好方案卡」按鈕可現場驗證 `check_package_availability` 的 warning 會消失 |
 | `/probe` | **不 stub 任何東西**，列出這台機器上各內建 AI API 的真實 `availability()`。查「為什麼我這裡不能用」先看這頁 |
 
 為什麼需要 server 而不是直接開檔案：評論頁靠 `isReviewPage()` 比對 `location.pathname`（`/order/comment/<id>`），`file://` 做不出那個形狀。
@@ -98,6 +122,8 @@ pnpm demo
 ```
 public/            MV3 manifest、sprite、emoji 等資產（原樣複製進 dist）
 src/               content script 進入點、小夥伴編排（Buddy / content.tsx）
+src/webmcp.ts      WebMCP 註冊層進入點（獨立 bundle，跑在 MAIN world）
+src/webmcp/        WebMCP 的型別宣告（@types/dom-chromium-ai 不含 modelContext）
 src/components/    UI 元件：各 buddy、商品摘要卡片、翻譯按鈕、頭像 / 反應列
 src/hooks/         流程與狀態機：摘要、商品摘要、值不值得、評論潤飾 / 翻譯、model gate、設定
 src/lib/           資料層：內容擷取、商品 / 評論頁偵測、各 AI API 包裝、快取、設定
