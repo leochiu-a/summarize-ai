@@ -257,6 +257,8 @@ describe('Buddy 快取', () => {
     expect(calls.summarize).toBe(1)
     expect(screen.getByText(/台灣自由行攻略/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: '幫我摘要這頁' })).toBeNull()
+    // 有快取就不該再載模型：仍是第一次那一份 create（收合時已 release，若這裡預熱會變 2）
+    expect(calls.create).toBe(1)
   })
 
   it('按重做會略過快取、強制重跑', async () => {
