@@ -20,63 +20,18 @@
 // 用不住的 filter 有價值。
 //
 // ── 例外：出發日期（`saleDateFrom` / `saleDateTo`，2026-08-03 實機驗證）─────────
-// 上表的 `availableFrom` 是**用錯資料來源**才站不住，不是「日期不該篩」。SRP 側邊欄其實
-// 有一個真的「出發日期」篩選器（`input[placeholder="出發日期"]`，daterangepicker），
-// 它打的是**同一支 endpoint 的另一種形狀**，而且是後端篩的：
+// 上表的 `availableFrom` 是**用錯資料來源**才站不住，不是「日期不該篩」。列表頁側邊欄其實
+// 有一個真的「出發日期」篩選器，而且是後端篩的。實測 `keyword=東京` 594 → 542，
+// 而被篩掉的商品 `earliest_sale_date` 一樣是 8 月 ——
+// 也就是**這件事 client 端拿 `earliest_sale_date` 怎麼算都做不到**。
 //
-//   POST /zh-tw/product/ajax_get_product_list?keyword=…&sort=prec&page=1&count=20
-//   Content-Type: application/x-www-form-urlencoded
-//   X-Requested-With: XMLHttpRequest
-//   body: filter[sale_date][from]=20261105&filter[sale_date][to]=20261120&csrf_token_name=<hash>
+// 送法與四個「不會報錯」的坑（含實測數字）整理在
+// [docs/webmcp.md](../../docs/webmcp.md#search_products-的設計要點)。這裡只留一條最容易誤判的：
 //
-// （query 那半跟原本的 GET 完全一樣。SRP 還會多帶 `start` 與 `tab_key`，我們不帶 —— 見 `pageUrl`。）
-//
-// 實測 `keyword=東京`：無條件 594 → 11/05–11/20 剩 542（同一天內重測會在 ±3 筆間漂，
-// 站上商品本來就一直在動，看的是量級不是精確值）。而且被篩掉的商品 `earliest_sale_date`
-// 是 2026-08 —— 也就是**這件事 client 端用 earliest_sale_date 永遠做不到**。
-// 這正好落在「WebMCP 省的是跨頁抓取與多步互動」那條判準的獲勝側。
-//
-// 三個實測踩到、會安靜出錯的地方（都在下面的程式碼裡擋住了）：
-//
-//   1. **`filter[…]` 只從 `$_POST` 讀，所以非 POST + form-urlencoded 不可。**
-//      這條不是猜的，是 member-ci（CodeIgniter 2）的 controller 明寫的：
-//      `application/controllers/product.php` 的 `ajax_get_product_list()` 第一件事是
-//
-//        $request_body_data = $this->input->post() ?: [];
-//
-//      CI2 的 `Input::post()` 只走 `$_POST`（`system/core/Input.php`），而 PHP 只在
-//      **method 是 POST 且 Content-Type 是 form-urlencoded / multipart** 時才填 `$_POST`。
-//      推論出兩件事，兩件都是實作上的硬約束、不是風格選擇：
-//
-//        • query string 放 filter 永遠沒用（controller 根本沒讀 `$_GET` 的 filter）
-//        • **body 用 JSON 也沒用** —— `$_POST` 不會被填。Content-Type 必須是 form-urlencoded
-//
-//      實測四種組合，四種都回 HTTP 200、沒有任何錯誤訊號：
-//
-//        | 送法 | total |
-//        | --- | --- |
-//        | GET，filter 放 query | 594（無效） |
-//        | **POST，filter 放 query** | **594（無效）** |
-//        | POST，filter 放 body | 541 ✅ |
-//        | POST，不帶 filter | 594（POST 本身不影響結果） |
-//
-//      所以「改成 POST 就好」是錯的直覺，會得到一份看起來正常、其實沒篩的結果。
-//      URL 上那組 `sale_date_from` / `sale_date_to` 也只是**頁面網址**用的，API 不看。
-//
-//      題外話但值得記：member-ci 只是 BFF，它轉手打上游 search API 時**真的是 GET 帶 body**
-//      （`CURLOPT_CUSTOMREQUEST => 'GET'` + `CURLOPT_POSTFIELDS => json_encode(body)`，見
-//      `application/models/kk_web_api_model.php` 的 `get_with_body_and_query`）。
-//      也就是「GET 讀 body」這個設計在這條鏈上確實存在，只是不在我們打的那一跳。
-//   2. **日期必須是緊湊格式 `YYYYMMDD`**（前端共用的 `apiDateFormat`，見 member-ci 的
-//      `resources/share/js/libs/dateTimeFormat.js`）。傳 `2026-11-05` 會回 HTTP 200 +
-//      `status:"success"` + `total:0`，而且 `data` 陣列**被換成 `recommend_productlist`**
-//      （搜「東京」回釜山通行證）。跟「這個區間真的沒有商品」（實測 2028-11 就是這樣）
-//      回的是同一個形狀，事後無法區分 —— 所以格式在送出前就要驗死。
-//      （member-ci 對 `filter` 是**原封不動轉發**，`PRODUCT_LIST_FILTER_ID_SALE_DATE` 只被
-//      define 沒被用到 —— 也就是格式檢查在上游 search API，BFF 這層不會擋，也不會轉譯。）
-//   3. **要帶 CSRF token**，不帶回 HTTP 403。token 在 SSR bootstrap 裡
-//      （`__INIT_STATE__.state.security`），而**商品頁沒有 `__INIT_STATE__`**，
-//      得另外抓一次列表頁 HTML（~1.5MB）才拿得到。見 `getCsrf`。
+//   **`filter[…]` 只有放在 POST 的 form body 才生效。** 放 query string 無效，而且**改成 POST
+//   但 filter 留在 query 一樣無效** —— 決定結果的是位置不是 method。所以「改成 POST 就好」是
+//   錯的直覺，會得到一份看起來正常、其實沒篩過的結果，而且四種送法全都回 HTTP 200。
+//   （「那用 GET 帶 body」在瀏覽器端也行不通：`fetch` 直接拋 TypeError，XHR 把 body 安靜丟掉。）
 //
 // ── 為什麼價格不能拿來篩（實測 2026-07-28）─────────────────────────────
 // `min_price` 是「起價」，而它不精確的原因**依品類不同**：
@@ -125,10 +80,7 @@ export interface SearchQuery {
   minRating?: number
   /** 最低評論數。防止 8 則評價的 5.0 星洗掉 5,044 則的 4.89 星 */
   minReviews?: number
-  /**
-   * 出發日期區間起（`YYYY-MM-DD`）。**這是後端篩的**，不是 client 端拿
-   * `earliest_sale_date` 比對——後者做不到（見檔頭）。兩端可以只給一邊。
-   */
+  /** 出發日期區間起（`YYYY-MM-DD`）。**後端篩的**，見檔頭。兩端可以只給一邊 */
   saleDateFrom?: string
   /** 出發日期區間迄（`YYYY-MM-DD`） */
   saleDateTo?: string
@@ -181,16 +133,7 @@ export interface SearchResult {
   notes: string[]
   /** 實際送給後端的出發日期區間（`YYYY-MM-DD ~ YYYY-MM-DD`）。沒帶日期時不填 */
   dateWindow?: string
-  /**
-   * `scanned === 0` 時填，說明**是哪一種 0**。三種的修法完全不同：
-   *
-   *   • `fetch` —— API 一筆都沒回（endpoint 改版 / 被限流）。放寬條件沒用
-   *   • `parse` —— 有回但每一筆都解析不了（欄位名或型別變了）。放寬條件沒用
-   *   • `dateWindow` —— 後端的出發日期篩選回 0 筆。**這一種放寬日期是有用的**
-   *
-   * 混在一起講的代價實測過：agent 拿到 `scanned: 0` 以為是條件太嚴，放寬重試還是 0，
-   * 最後放棄 tool 改去爬 DOM。
-   */
+  /** `scanned === 0` 時填，說明是哪一種 0 —— 三種的修法完全不同，見 `searchProducts` 末段 */
   emptyReason?: 'fetch' | 'parse' | 'dateWindow'
   /**
    * `scanned === 0` 時填。
@@ -307,18 +250,14 @@ export function normalizeHit(raw: Record<string, unknown>): SearchHit | null {
   }
 }
 
-// ── 出發日期篩選：CSRF token 與 POST 形狀 ─────────────────
+// ── 出發日期篩選：CSRF token ───────────────────────────────
 //
-// CSRF 不是日期參數要求的，是**跟著 POST 來的**（CodeIgniter 2 的 CSRF 只擋 POST；實測
-// 「POST 但不帶 filter」一樣要 token，不帶就 403）。而我們之所以非 POST 不可，是因為
-// controller 用 `$this->input->post()` 讀 filter —— 詳見檔頭第 1 點。
+// CSRF 是**跟著 POST 來的**，不是日期參數自己的要求：實測 GET 完全不帶 token 正常回 598 筆，
+// 而「POST 但不帶 filter」一樣要 token、不帶就 403。所以沒帶日期的搜尋不必付這個成本。
 //
-// ⚠️ 這一段是整支檔案裡唯一綁到站方前端內部細節的地方（`__INIT_STATE__` 的形狀）。
-// AGENTS.md 的紅線是「不要綁 Vue 內部細節」，這裡破例的理由與代價要講清楚：
-// 後端要 CSRF token，而 token 只存在於 SSR bootstrap 裡，沒有第二個來源。
-// 補償做法是**壞掉時要大聲**——拿不到 token 就讓整支搜尋失敗（見 `searchProducts`），
-// 絕不「安靜地回一份沒套用日期的結果」。後者才是真正危險的：agent 會把全年份的商品
-// 當成「11 月可訂」講給使用者聽，而輸出上完全看不出來篩選沒生效。
+// ⚠️ 這一段是整支檔案裡唯一綁到站方前端內部狀態的地方（`__INIT_STATE__` 的形狀），
+// 破了 AGENTS.md 的「不要綁 Vue 內部細節」。破例是因為 token 沒有第二個來源；
+// 補償是壞掉時要大聲 —— 見 `searchProducts` 拿不到 token 的那段。
 
 interface Csrf {
   name: string
@@ -375,19 +314,13 @@ function compact(iso: string): string {
 /**
  * 出發日期的驗證。有問題回**可自我修正的訊息**，沒問題回 null。
  *
- * 兩層 caller（tool 與 lib）共用同一份，訊息刻意不提參數名 —— tool 那邊叫 `dateFrom`、
- * lib 這邊叫 `saleDateFrom`，寫死任一個都會對另一個說錯話。
+ * 訊息刻意不提參數名 —— tool 那邊叫 `dateFrom`、lib 這邊叫 `saleDateFrom`，
+ * 寫死任一個都會對另一個說錯話。
  *
- * ⚠️ **為什麼光有 `/^\d{4}-\d{2}-\d{2}$/` 不夠**（2026-08-03 實測）：格式對但日子不存在時，
- * 後端的反應**分兩種，而兩種都不會報錯**：
- *
- *   • `20261131`（11 月沒 31 號）→ 回 538 筆。後端自己滾到 12/1，也就是**回了另一個區間
- *     的答案**，而我們會照著它宣告「11/01–11/31 有 538 個選擇」
- *   • `20260230` / `20261301` → 回 `total: 0`
- *
- * 第二種特別貴：0 筆會走到 `emptyReason: 'dateWindow'`，於是我們對一個**根本不存在的日期**
- * 講出一句關於庫存的斷言（「這段期間沒有可訂商品，換日期是有意義的重試」）。
- * 所以日子存不存在必須自己驗 —— 用 Date 來回轉一次就夠，不值得為這件事加一個日期套件。
+ * ⚠️ **為什麼光有 regex 不夠**：格式對但日子不存在時，後端不報錯，而且兩種反應都是錯的
+ * 答案 —— `2026-11-31` 回的是滾到 12/1 之後**另一個區間**的結果，`2026-02-30` 回 0 筆
+ * （於是我們會對一個不存在的日期宣告「這段期間沒有可訂商品」）。所以日子存不存在要自己驗，
+ * 用 Date 來回轉一次就夠，不值得為這件事加一個日期套件。
  */
 export function validateDateWindow(from?: unknown, to?: unknown): string | null {
   for (const value of [from, to]) {
@@ -416,10 +349,8 @@ function pageUrl(keyword: string, page: number): string {
   url.searchParams.set('sort', 'prec')
   url.searchParams.set('page', String(page))
   url.searchParams.set('count', String(PAGE_SIZE))
-  // 刻意**不**跟著 SRP 一起帶 `start` 與 `tab_key`。SRP 有帶，但兩個都是無效參數：
-  //   • `start` 由後端自己算（`kkday_search_service.php`：`($page - 1) * $count`），不吃輸入
-  //   • `tab_key` 預設就是空字串，而且 controller 讀的是 body 那份不是 query 這份
-  // 實測補上/拿掉，page 1 與 page 2 的 total 與首筆 id 都完全一樣。帶了只是讓人以為它有用。
+  // 列表頁自己還會帶 `start` 與 `tab_key`，刻意不跟 —— 實測補上／拿掉，page 1 與 page 2 的
+  // total 與首筆 id 完全一樣。帶了只會讓人以為它有用。
   return url.toString()
 }
 
@@ -446,8 +377,7 @@ export async function fetchPage(keyword: string, page: number, filter?: DateFilt
         method: 'POST',
         credentials: 'same-origin',
         headers: {
-          // Content-Type **必須**是 form-urlencoded：controller 讀的是 `$_POST`，而 PHP 只在
-          // form-urlencoded / multipart 時才填它。改成 JSON 會安靜地變成「沒帶 filter」。
+          // Content-Type **必須**是 form-urlencoded，實測換成 JSON 回 403（連 token 都讀不到）。
           // X-Requested-With 是照實機那一發帶的，沒實測過少了會怎樣，不省。
           'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
           'X-Requested-With': 'XMLHttpRequest',
@@ -464,9 +394,8 @@ export async function fetchPage(keyword: string, page: number, filter?: DateFilt
   const items = nested ? (outer!.data as unknown[]) : flat ? (body.data as unknown[]) : null
   const total = num(outer?.total) ?? num(outer?.saleable_product_count)
   if (!items) {
-    // 「這個條件下沒有商品」不是格式錯誤 —— 站方回的是 HTTP 200 + status:"success" +
-    // total:0，而且把 `data` 陣列換成 `recommend_productlist`（實測搜「東京」回釜山通行證）。
-    // 硬 throw 成「格式不符預期」會把一個正常結果講成 API 掛了。
+    // 「查無商品」不是格式錯誤：站方回 total:0 並把 `data` 陣列換成 `recommend_productlist`
+    // （實測搜「東京」回釜山通行證）。硬 throw 成格式錯誤會把正常結果講成 API 掛了。
     if (total === 0) {
       return {
         items: [],
@@ -524,9 +453,7 @@ export async function searchProducts(q: SearchQuery): Promise<SearchResult> {
   const limit = Math.min(Math.max(q.limit ?? DEFAULT_LIMIT, 1), 20)
   const maxPages = Math.min(Math.max(q.maxPages ?? DEFAULT_MAX_PAGES, 1), HARD_MAX_PAGES)
 
-  // ── 出發日期：在送出前就要驗死 ──────────────────────────
-  // 後端對「日期不合法」與「這區間真的沒商品」回的是同一個形狀（都是 total:0），
-  // 事後分不出來。唯一能保證 0 筆是真 0 筆的辦法，就是不讓不合法的請求出門。
+  // 不合法的日期不能出門：後端對它與「這區間真的沒商品」回同一個形狀，事後分不出來
   const badDate = validateDateWindow(q.saleDateFrom, q.saleDateTo)
   if (badDate) throw new Error(badDate)
   const wantsDates = !!(q.saleDateFrom || q.saleDateTo)
@@ -634,7 +561,6 @@ export async function searchProducts(q: SearchQuery): Promise<SearchResult> {
   //   4. normalize 有過但條件全篩掉  → 條件太嚴（這種 all.length > 0，不會進這裡）
   //
   // 第 2 種是最會被誤判成第 1 種的。它有個明確特徵：rawCount > 0 而 all.length === 0。
-  // 第 3 種是加了日期篩選之後才出現的：raw 空、total 0、而且有帶日期。
   let emptyReason: SearchResult['emptyReason']
   if (!all.length) {
     const rawCount = raw.length

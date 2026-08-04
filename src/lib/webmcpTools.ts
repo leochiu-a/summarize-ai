@@ -108,10 +108,9 @@ function problem(message: string): string {
 // 這支 tool 打的是 SRP 自己在用的那個 API，然後用它本來就回的 rating_star 做收斂 ——
 // 也就是把「後端早就給了、前端沒用」的欄位補成可用的篩選。
 //
-// 出發日期（dateFrom / dateTo）是另一回事：SRP 側邊欄本來就有這個篩選器，而且是**後端篩的**
-// （`filter[sale_date][from|to]`，實測東京 594 → 542）。這一層要做的不是自己發明篩選，
-// 是把那個「網站有、但要點三層 UI 才碰得到」的能力直接開給 agent。細節與三個會安靜出錯的
-// 坑寫在 productSearch.ts 檔頭。
+// 出發日期（dateFrom / dateTo）是另一回事：SRP 側邊欄本來就有這個篩選器，而且是**後端篩的**。
+// 這一層要做的不是自己發明篩選，是把那個「網站有、但要點三層 UI 才碰得到」的能力開給 agent。
+// 送法與那幾個會安靜出錯的坑寫在 productSearch.ts 檔頭。
 //
 // 參數刻意只收「SRP UI 已經有、或明顯該有」的維度。不收年齡、同行人組成、身心狀況這類
 // 個人條件 —— spec §6.3.3 明列那是 over-parameterization 威脅（釣 agent 交出跨站個資 →
@@ -160,10 +159,8 @@ const discoveryTools: ModelContextTool[] = [
       if (typeof keyword !== 'string' || !keyword.trim()) {
         return problem('The "keyword" argument must be a non-empty string, e.g. "東京".')
       }
-      // 日期在這裡就擋掉，不要送出去。站方對「日期不合法」與「這區間沒商品」回的是同一個
-      // 形狀（都是 total:0），送出去之後就再也分不出來是哪一種了。
-      // 驗證邏輯跟 lib 共用一份 —— 包含「2026-02-30 這種格式對但不存在的日子」，
-      // 那種送出去會讓我們對一個不存在的日期宣告「這段期間沒有可訂商品」。
+      // 跟 lib 共用同一份驗證（含 2026-02-30 這種格式對但不存在的日子）。不合法的日期送出去
+      // 之後，就再也分不出「不合法」與「這區間真的沒商品」了 —— 兩者回同一個形狀。
       const badDate = validateDateWindow(dateFrom, dateTo)
       if (badDate) return problem(badDate)
       try {
@@ -217,11 +214,11 @@ const discoveryTools: ModelContextTool[] = [
         // 用 jsonFitList：太長時砍筆數而不是切字串，保證回去的是合法 JSON
         return jsonFitList(
           (products, dropped) => ({
-            // 篩選有沒有真的生效要看得見。只寫在 notes 裡不夠 —— 實測 agent 會略過 notes，
-            // 而「以為篩了其實沒篩」是這支 tool 最貴的錯法。
+            // 篩選有沒有生效要看得見 —— 實測 agent 會略過 notes，而「以為篩了其實沒篩」
+            // 是這支 tool 最貴的錯法
             ...(result.dateWindow ? { dateWindow: result.dateWindow } : {}),
-            // 有日期篩選時 total 的意思變了（是「這個區間內的商品數」而不是「全站」），
-            // 所以連欄位名一起換。同一個名字兩種意思，遲早會被讀成錯的那個。
+            // 有日期時 total 的意思變了（區間內而非全站），所以連欄位名一起換：
+            // 同一個名字兩種意思遲早被讀成錯的那個
             ...(result.dateWindow ? { totalInWindow: result.total } : { totalOnSite: result.total }),
             scanned: result.scanned,
             matched: result.matched,

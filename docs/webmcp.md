@@ -213,52 +213,44 @@ X-Requested-With: XMLHttpRequest
 filter[sale_date][from]=20261105&filter[sale_date][to]=20261120&csrf_token_name=<hash>
 ```
 
-query 那半跟原本的 GET **完全一樣**。SRP 還會多帶 `start` 與 `tab_key`，我們刻意不帶：
-`start` 由後端自己從 `($page - 1) * $count` 算（`kkday_search_service.php:1211`）、不吃輸入；
-`tab_key` 預設就是空字串，而且 controller 讀的是 body 那份。實測補上／拿掉，page 1 與 page 2
-的 total 與首筆 id 完全一樣 —— 帶了只會讓人以為它有用。
+query 那半跟原本的 GET **完全一樣**。列表頁自己還會多帶 `start` 與 `tab_key`，我們刻意不帶
+——實測補上／拿掉，page 1 與 page 2 的 total 與首筆 id 完全一樣（`start` 後端自己從
+page × count 算，`tab_key` 預設就是空字串）。帶了只會讓人以為它有用。
 
-三個**都不會報錯**的坑（程式碼裡都擋住了，理由寫在
-[`productSearch.ts`](../src/lib/productSearch.ts) 檔頭）：
+### 四個「不會報錯」的坑
+
+這支 API 對每一種錯誤用法都回 **HTTP 200 + `status:"success"`**（除了少 CSRF），沒有任何訊號。
+四個都在程式碼裡擋住了：
 
 | 坑 | 症狀 |
 | --- | --- |
-| 把 `filter[…]` 放在 query string | 完全無效，**而且改成 POST 也一樣無效**（實測 594 / 594 / 541 / 594：GET+query、POST+query、POST+body、POST 無 filter）。原因見下方〈為什麼非 POST 不可〉。網址上那組 `sale_date_from` / `sale_date_to` 也只是**頁面網址**用的，API 不看 |
-| 日期寫成 `2026-11-05` | HTTP 200 + `status:"success"` + `total:0`，而且 `data` 陣列被換成 `recommend_productlist`（搜「東京」回釜山通行證）。跟「這區間真的沒商品」（2028-11 就是這樣）**回同一個形狀** |
-| 日期格式對但日子不存在 | `20260230` / `20261301` 回 `total:0`（會被誤報成「這段期間沒有可訂商品」）；`20261131` 更陰險 —— 後端自己滾到 12/1 回 538 筆，也就是**回了另一個區間的答案**。所以 `validateDateWindow` 會用 Date 來回轉一次擋掉，不只看 regex |
-| 沒帶 CSRF token | HTTP 403。這是**跟著 POST 來的**（站方那套只擋 POST），不是日期參數本身的要求。token 在 `__INIT_STATE__.state.security`，而**商品頁沒有 `__INIT_STATE__`**，得另外抓一次列表頁 HTML（~1.5MB）；SSR HTML 裡的 key 名還不一樣（`csrf_hash` vs `CSRFHash`） |
+| 把 `filter[…]` 放在 query string | 完全無效，**而且改成 POST 也一樣無效**。決定結果的是**位置不是 method** —— 實測 594／594／541／594（GET+query、POST+query、POST+body、POST 無 filter）。網址上那組 `sale_date_from` / `sale_date_to` 也只是**頁面網址**用的，API 不看 |
+| `Content-Type` 換成 JSON | HTTP 403 —— 連 body 裡的 CSRF token 都讀不到。form-urlencoded 是硬要求，那個 header 不是裝飾 |
+| 日期寫成 `2026-11-05` | HTTP 200 + `status:"success"` + `total:0`，而且 `data` 陣列被換成 `recommend_productlist`（搜「東京」回**釜山**通行證）。跟「這區間真的沒商品」（2028-11 就是這樣）**回同一個形狀**，事後無法區分 |
+| 日期格式對但日子不存在 | `20260230` / `20261301` 回 `total:0`（會被誤報成「這段期間沒有可訂商品」）；`20261131` 更陰險 —— 後端自己滾到 12/1 回 538 筆，也就是**回了另一個區間的答案**。所以 `validateDateWindow` 用 Date 來回轉一次擋掉，不只看 regex |
 
-### 為什麼非 POST 不可（對照 member-ci 原始碼確認過）
+第三個坑決定了設計：既然事後分不出「不合法」與「真的 0 筆」，就得在**送出前**驗死。
 
-一開始只有黑箱量測，只能說「filter 得放 body」。翻 [member-ci](https://github.com/kkday-it/kkday-member-ci)
-之後拿到確定的答案 —— `application/controllers/product.php` 的 `ajax_get_product_list()`
-第一行就是：
+### 「那都走 GET 不就不用 CSRF 了」——不行，但原因值得記
 
-```php
-$request_body_data = $this->input->post() ?: [];
-```
+CSRF 確實是**跟著 POST 來的**，不是日期參數自己的要求。實測：
 
-CI2 的 `Input::post()` 只走 `$_POST`（`system/core/Input.php`），而 PHP 只在
-**method 是 POST 且 Content-Type 是 form-urlencoded / multipart** 時才會填 `$_POST`。
-兩個硬約束由此而來，都不是風格選擇：
+| 送法 | 結果 |
+| --- | --- |
+| GET，完全不帶 CSRF | 200，598 筆 ← **就是沒帶日期時走的路** |
+| POST + form body，不帶 CSRF | 403 |
+| POST + form body + CSRF | 200，538 筆 |
 
-- query string 放 filter 永遠沒用 —— controller 根本沒讀 `$_GET` 裡的 filter
-- **body 用 JSON 也沒用** —— `$_POST` 不會被填。`Content-Type` 必須是 form-urlencoded
+所以沒帶日期的搜尋本來就不付 CSRF 這個成本。但 GET **帶不動 filter**，而「GET 加個 body」
+在瀏覽器端也走不通：`fetch()` 直接拋 `TypeError: Request with GET/HEAD method cannot have body`，
+`XMLHttpRequest` 則是把 body 依規格**安靜丟掉**、回一份沒篩過的結果（total 598）。
+後者正是這個專案最怕的形狀，所以不要用「XHR 好像可以」繞。
 
-CSRF 同理，是**跟著 POST 來的**（CI2 的 CSRF 只擋 POST），不是日期參數自己的要求。
+> 這只證明**瀏覽器端送不出 GET + body**，不代表對方伺服器不接受 —— 那件事從頁面上測不到。
 
-還有兩件從原始碼才看得到的事：
-
-- **BFF 這層對 `filter` 是原封不動轉發**：`PRODUCT_LIST_FILTER_ID_SALE_DATE` 在
-  `application/helpers/filter_helper.php` 只被 `define` 沒被用到。所以 `YYYYMMDD` 這個格式
-  要求與「格式錯回 0 筆」都來自**上游 search API**，member-ci 不擋也不轉譯。
-- **上游那一跳真的是「GET 帶 body」**：`kk_web_api_model.php` 的 `get_with_body_and_query()`
-  用 `CURLOPT_CUSTOMREQUEST => 'GET'` 搭 `CURLOPT_POSTFIELDS => json_encode(body)` 打
-  `v3/product/search/product-list`。也就是這個設計在鏈上確實存在，只是不在我們打的那一跳。
-
-`filter[…]` 底下**目前後端認得四個 key**（同一個 helper 檔）：`destinations`、
-`product_categories`、`price`、`sale_date`。我們只用了 `sale_date`——`price` 是起價所以沒有
-意義，另外兩個要不透明代碼（`product_categories` 正是當初回假 0 筆那個），要開得先拿到代碼表。
+`filter[…]` 底下除了 `sale_date`，看起來還有對應側邊欄其他篩選器的 key（目的地、商品類別、
+價錢），但我們**沒有驗證過**，也還沒有用。`price` 比對的是起價所以沒有意義；商品類別要不透明
+代碼（正是當初回假 0 筆那個），要開得先拿到代碼表。
 
 第二個坑決定了設計：既然事後分不出「格式錯」與「真的 0 筆」，格式就得在**送出前**驗死。
 第三個坑決定了失敗方式：拿不到 token 時整支搜尋失敗，**絕不安靜地回一份沒套用日期的清單**——

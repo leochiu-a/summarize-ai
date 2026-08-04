@@ -98,8 +98,8 @@ describe('search_products 的 schema 不收個人條件（spec §6.3.3 over-para
   })
 
   it('schema 裡沒有 maxPrice / availableFrom —— 用不住的維度不留', () => {
-    // maxPrice 比對的是起價；availableFrom 是舊的 client 端做法（拿 earliest_sale_date
-    // 自己比），已經被後端的 dateFrom / dateTo 取代 —— 名字也一起換掉，避免兩種語意混用。
+    // availableFrom 是舊的 client 端做法，已被後端的 dateFrom / dateTo 取代。
+    // 名字一起換掉，避免兩種語意混用。
     const tool = ALL_TOOLS.find((t) => t.name === 'search_products')!
     const props = (tool.inputSchema as { properties: Record<string, unknown> }).properties
     for (const k of ['maxPrice', 'availableFrom', 'category']) expect(k in props, k).toBe(false)
