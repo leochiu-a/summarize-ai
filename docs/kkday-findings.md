@@ -224,29 +224,21 @@ X-Requested-With: XMLHttpRequest
 filter[sale_date][from]=20261105&filter[sale_date][to]=20261120&csrf_token_name=<hash>
 ```
 
-實測 `keyword=東京`：594 → 542。我們已經接上了。
+實測 `keyword=東京`：594 → 542。我們已經接上了，剩下三題想確認：
 
-翻過 member-ci 之後，原本想問的幾題自己有答案了，記在這裡免得重複問：
-
-- **為什麼非 POST 不可**：`ajax_get_product_list()` 用 `$this->input->post()` 讀 filter，
-  CI2 的 `Input::post()` 只走 `$_POST`，所以 query string 放 filter 沒用、body 用 JSON 也沒用
-  （`$_POST` 不會被填），`Content-Type` 必須是 form-urlencoded。CSRF 是跟著 POST 來的。
-- **`filter[...]` 還有哪些 key**：`application/helpers/filter_helper.php` 定義了四個 ——
-  `destinations` / `product_categories` / `price` / `sale_date`。
-- **格式檢查不在 BFF**：`PRODUCT_LIST_FILTER_ID_SALE_DATE` 只被 define 沒被用到，
-  `filter` 是原封不動轉發給上游的。
-
-所以剩下兩題，而且**收件人應該是 search API 那邊不是前端**：
-
-1. **格式錯會回一個看起來成功的空結果。** 傳 `2026-11-05`（而不是 `20261105`）回的是
+1. **不合法的日期會回一個看起來成功的空結果。** 傳 `2026-11-05`（而不是 `20261105`）回的是
    HTTP 200 + `status:"success"` + `total:0`，而且 `data` 陣列被換成 `recommend_productlist`
-   （搜「東京」回釜山通行證）。這跟「這個區間真的沒商品」回**完全一樣的形狀**，呼叫端無法
-   區分。`v3/product/search/product-list` 可以在格式不合時回一個明確的錯誤碼嗎？
-2. **`sale_date` 實際比對的是什麼？** 見下方問題 4 的更新 —— 它顯然不是 `earliest_sale_date`。
+   （搜「東京」回釜山通行證）。這跟「這個區間真的沒商品」回**完全一樣的形狀**，呼叫端無法區分。
+   日期存在性也一樣沒擋：`20260230` / `20261301` 回 0 筆，而 `20261131` 會被當成 12/1
+   —— 也就是**回了另一個區間的答案**。這幾種可以回明確的錯誤碼嗎？
+2. **`sale_date` 實際比對的是哪個欄位／哪個概念？**（銷售期間？出發日？）見下方問題 4 的更新
+   —— 它顯然不是 `earliest_sale_date`。
+3. **CSRF token 只在列表頁的 SSR bootstrap 裡**（`__INIT_STATE__.state.security`），商品頁沒有。
+   我們現在得從商品頁多抓一次列表頁 HTML（~1.5MB）只為了拿那 32 個字元。有沒有輕量一點的
+   取得方式（例如一支只回 token 的 endpoint，或放進 meta tag）？
 
-給前端的一題：**CSRF token 只在列表頁的 SSR bootstrap 裡**（`__INIT_STATE__.state.security`），
-商品頁沒有。我們現在得從商品頁多抓一次列表頁 HTML（~1.5MB）只為了拿那 32 個字元。
-有沒有輕量一點的取得方式（例如一支只回 token 的 endpoint，或放進 meta tag）？
+另外 `filter[...]` 看起來是個通用容器，如果側邊欄其他篩選器（目的地、商品類別、價錢）也走
+同一組，想要一份可用 key 與值格式的清單 —— 那下面第 6 題（`CATEGORY_*` 對照表）可能就一起解決了。
 
 還沒有答案的：**評分**（≥ 4.5）、**行程長度**（半日 / 一日 / 多日）、**導覽語言**、
 **價格區間**、**目的地 ID**（`destination=D-JP-3261` 這種格式，API 吃嗎？）

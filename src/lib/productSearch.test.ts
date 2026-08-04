@@ -258,9 +258,8 @@ describe('searchProducts — client 端收斂（SRP UI 做不到的部分）', (
   })
 
   it('價格不是 filter，earliestDate 也不拿來自己比對 —— 這是探索工具，不是篩選器集合', async () => {
-    // maxPrice 比對的是起價（票券受日期影響、esim 受方案跨度影響），已移除。
-    // 日期是後端篩的（filter[sale_date]），這一層**不會**拿 earliest_sale_date 自己比 ——
-    // 那個欄位只是「最早開賣日」，用它篩等於沒篩（esim 類全部都是今天）。
+    // maxPrice 比對的是起價，已移除。日期是後端篩的，這一層**不會**拿 earliest_sale_date
+    // 自己比 —— 那只是「最早開賣日」，用它篩等於沒篩（esim 類全部都是今天）。
     mockApi([[
       apiItem({ prod_oid: 'pricey', min_price: 9999, max_price: 20000 }),
       apiItem({ prod_oid: 'future', earliest_sale_date: '20271231' }),
@@ -360,8 +359,7 @@ describe('searchProducts — client 端收斂（SRP UI 做不到的部分）', (
   })
 })
 
-// 這一整組守的是「日期篩選有沒有真的送出去」。四條斷言對應四個實機踩到、
-// 而且**都不會報錯**的坑：GET 無效、格式要緊湊、要帶 CSRF、0 筆有兩種意思。
+// 這一整組守的是「日期篩選有沒有真的送出去」——那件事壞掉時不會有任何錯誤訊號。
 describe('searchProducts — 出發日期（站方自己的 filter[sale_date]）', () => {
   const inits: (RequestInit | undefined)[] = []
   // ⚠️ 一定要在這裡清。有兩條測試是自己 stub fetch（不走 mockApiRecording）卻讀 inits[0]，
@@ -410,10 +408,9 @@ describe('searchProducts — 出發日期（站方自己的 filter[sale_date]）
     expect(body.get('csrf_token_name')).toBe('abc123')
     const headers = inits[0]?.headers as Record<string, string>
     expect(headers['X-Requested-With']).toBe('XMLHttpRequest')
-    // Content-Type 必須是 form-urlencoded：controller 讀 $_POST，而 PHP 只在
-    // form-urlencoded / multipart 時才填它。改成 JSON 會安靜地變成「沒帶 filter」。
+    // 實測換成 JSON 回 403，所以這個 header 不是裝飾
     expect(headers['Content-Type']).toContain('application/x-www-form-urlencoded')
-    // query 那半跟不帶篩選時一模一樣 —— SRP 會多帶 start / tab_key，但兩個都無效（見 pageUrl）
+    // query 那半跟不帶篩選時一模一樣 —— 列表頁會多帶 start / tab_key，但兩個都無效（見 pageUrl）
     const url = new URL(calls[0], 'https://www.kkday.com')
     expect(url.searchParams.has('start')).toBe(false)
     expect(url.searchParams.has('tab_key')).toBe(false)
@@ -448,9 +445,8 @@ describe('searchProducts — 出發日期（站方自己的 filter[sale_date]）
     expect(calls).toHaveLength(0) // 一發都沒出門
   })
 
-  // 實測：`20260230` / `20261301` 回 total:0（我們會誤報成「這段期間沒有可訂商品」），
-  // 而 `20261131` 更陰險 —— 後端自己滾到 12/1 回 538 筆，也就是回了**另一個區間**的答案。
-  // 兩種都是格式正確、日子不存在，所以 regex 擋不到。
+  // 格式正確但日子不存在，regex 擋不到：`20260230` 回 0 筆（會被誤報成「沒有可訂商品」），
+  // `20261131` 更陰險 —— 後端滾到 12/1 回 538 筆，也就是回了**另一個區間**的答案。
   it('格式對但日子不存在也要擋（2/30、11/31、13 月）', async () => {
     stubInitState()
     mockApiRecording([[apiItem()]])
