@@ -29,7 +29,7 @@ Claude Code…）。這條路繞開了內建 AI 的兩個硬限制——繁中�
 
 | tool | 註冊在 | 做什麼 |
 | --- | --- | --- |
-| `search_products` | 全站 | 打 SRP 自己在用的 API，掃 60 筆回 12 筆候選，含評分／評論數／價格區間／最早可出發日 |
+| `search_products` | 全站 | 打 SRP 自己在用的 API，掃 60 筆回 12 筆候選，含評分／評論數／價格區間／最早可出發日。給 `dateFrom`／`dateTo` 就套用**站方自己的「出發日期」篩選**（後端篩，實測東京 594 → 542） |
 | `check_package_availability` | 商品頁 | 打站方可訂性 API：問單日回逐方案可訂與否 + **剩餘數量**，問範圍回可訂日期清單。**不需要使用者先在頁面上選日期** |
 
 要跑起來：Chrome 需開 `chrome://flags/#enable-webmcp-testing`（WebMCP 目前是 origin trial；

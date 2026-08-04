@@ -20,7 +20,7 @@
 
 | 頁面 | tool | readOnly | 做什麼 |
 | --- | --- | --- | --- |
-| **全站** | `search_products` | ✅ | 搜尋並回傳候選集：關鍵字 + 評分門檻 + 評論數門檻 + 排序 |
+| **全站** | `search_products` | ✅ | 搜尋並回傳候選集：關鍵字 + **出發日期區間**（走站方後端的 `filter[sale_date]`）+ 評分門檻 + 評論數門檻 + 排序 |
 | 商品頁 | `check_package_availability` | ✅ | 打可訂性 API：單日回逐方案可訂與否 + 剩餘數量；範圍回可訂日期。另附 DOM 交叉檢核的 warning |
 
 就這兩支，而且都是唯讀。定義在 [`src/lib/webmcpTools.ts`](../src/lib/webmcpTools.ts)（純資料 +
@@ -185,14 +185,89 @@ warning 就消失。
 
 ## `search_products` 的設計要點
 
-SRP 一頁只給 10 筆（590 筆 = 59 頁，分頁按鈕還沒有 `href`），篩選器只有 6 組、**沒有日期也沒有
-評分**。而實機驗證發現 `ajax_get_product_list` 每筆商品本來就回 `rating_star` 與
-`earliest_sale_date`——UI 缺的那兩個維度，後端一直都給了。
+SRP 一頁只給 10 筆（590 筆 = 59 頁，分頁按鈕還沒有 `href`），而且**沒有評分篩選器**。
+實機驗證發現 `ajax_get_product_list` 每筆商品本來就回 `rating_star`——UI 缺的那個維度，
+後端一直都給了。
 
-但**只有評分與評論數這兩個維度站得住**：價格是「起價」（票券受日期影響、esim 受方案跨度影響，
-實測日本 eSIM 是 16–1841 共 115 倍），日期只是「最早開賣日」（esim 全部都是今天）。所以這支
-tool 刻意**不做**價格與日期篩選，改成把 `priceFrom`/`priceTo`/`earliestDate` 完整交出去讓模型
-自己判斷。實作細節與踩到的坑見 [`src/lib/productSearch.ts`](../src/lib/productSearch.ts) 檔頭。
+價格則**不做 filter**：`min_price` 是「起價」（票券受日期影響、esim 受方案跨度影響，實測日本
+eSIM 是 16–1841 共 115 倍），改成把 `priceFrom`/`priceTo` 完整交出去讓模型自己判斷。
+
+### 出發日期：從「不做」改成「照站方的做」（2026-08-03）
+
+原本這裡也寫著「日期不做 filter」，理由是 `earliest_sale_date` 只是最早開賣日、拿它篩等於沒篩。
+**那個結論是對的，但問錯了題目**——SRP 側邊欄其實一直有一個真的「出發日期」篩選器
+（`input[placeholder="出發日期"]`，在篩選欄下半部，所以掃 `innerText` 找「日期」找不到，
+它是 placeholder 不是文字）。它是**後端篩的**，實測 `keyword=東京` 從 594 筆收斂到 542 筆，
+而被篩掉那些的 `earliest_sale_date` 一樣是 8 月——也就是 client 端怎麼算都做不到。
+
+所以 tool 加了 `dateFrom` / `dateTo`（`YYYY-MM-DD`），直接轉成站方的參數送出去。
+這正好落在判準的獲勝側：省掉的是「開列表頁 → 捲到篩選器 → 開日曆 → 選兩個日期」這串互動。
+
+實機量出來的形狀（**GET 完全無效，一定要 POST**）：
+
+```
+POST /zh-tw/product/ajax_get_product_list?keyword=…&sort=prec&page=1&count=20
+Content-Type: application/x-www-form-urlencoded;charset=UTF-8
+X-Requested-With: XMLHttpRequest
+
+filter[sale_date][from]=20261105&filter[sale_date][to]=20261120&csrf_token_name=<hash>
+```
+
+query 那半跟原本的 GET **完全一樣**。SRP 還會多帶 `start` 與 `tab_key`，我們刻意不帶：
+`start` 由後端自己從 `($page - 1) * $count` 算（`kkday_search_service.php:1211`）、不吃輸入；
+`tab_key` 預設就是空字串，而且 controller 讀的是 body 那份。實測補上／拿掉，page 1 與 page 2
+的 total 與首筆 id 完全一樣 —— 帶了只會讓人以為它有用。
+
+三個**都不會報錯**的坑（程式碼裡都擋住了，理由寫在
+[`productSearch.ts`](../src/lib/productSearch.ts) 檔頭）：
+
+| 坑 | 症狀 |
+| --- | --- |
+| 把 `filter[…]` 放在 query string | 完全無效，**而且改成 POST 也一樣無效**（實測 594 / 594 / 541 / 594：GET+query、POST+query、POST+body、POST 無 filter）。原因見下方〈為什麼非 POST 不可〉。網址上那組 `sale_date_from` / `sale_date_to` 也只是**頁面網址**用的，API 不看 |
+| 日期寫成 `2026-11-05` | HTTP 200 + `status:"success"` + `total:0`，而且 `data` 陣列被換成 `recommend_productlist`（搜「東京」回釜山通行證）。跟「這區間真的沒商品」（2028-11 就是這樣）**回同一個形狀** |
+| 日期格式對但日子不存在 | `20260230` / `20261301` 回 `total:0`（會被誤報成「這段期間沒有可訂商品」）；`20261131` 更陰險 —— 後端自己滾到 12/1 回 538 筆，也就是**回了另一個區間的答案**。所以 `validateDateWindow` 會用 Date 來回轉一次擋掉，不只看 regex |
+| 沒帶 CSRF token | HTTP 403。這是**跟著 POST 來的**（站方那套只擋 POST），不是日期參數本身的要求。token 在 `__INIT_STATE__.state.security`，而**商品頁沒有 `__INIT_STATE__`**，得另外抓一次列表頁 HTML（~1.5MB）；SSR HTML 裡的 key 名還不一樣（`csrf_hash` vs `CSRFHash`） |
+
+### 為什麼非 POST 不可（對照 member-ci 原始碼確認過）
+
+一開始只有黑箱量測，只能說「filter 得放 body」。翻 [member-ci](https://github.com/kkday-it/kkday-member-ci)
+之後拿到確定的答案 —— `application/controllers/product.php` 的 `ajax_get_product_list()`
+第一行就是：
+
+```php
+$request_body_data = $this->input->post() ?: [];
+```
+
+CI2 的 `Input::post()` 只走 `$_POST`（`system/core/Input.php`），而 PHP 只在
+**method 是 POST 且 Content-Type 是 form-urlencoded / multipart** 時才會填 `$_POST`。
+兩個硬約束由此而來，都不是風格選擇：
+
+- query string 放 filter 永遠沒用 —— controller 根本沒讀 `$_GET` 裡的 filter
+- **body 用 JSON 也沒用** —— `$_POST` 不會被填。`Content-Type` 必須是 form-urlencoded
+
+CSRF 同理，是**跟著 POST 來的**（CI2 的 CSRF 只擋 POST），不是日期參數自己的要求。
+
+還有兩件從原始碼才看得到的事：
+
+- **BFF 這層對 `filter` 是原封不動轉發**：`PRODUCT_LIST_FILTER_ID_SALE_DATE` 在
+  `application/helpers/filter_helper.php` 只被 `define` 沒被用到。所以 `YYYYMMDD` 這個格式
+  要求與「格式錯回 0 筆」都來自**上游 search API**，member-ci 不擋也不轉譯。
+- **上游那一跳真的是「GET 帶 body」**：`kk_web_api_model.php` 的 `get_with_body_and_query()`
+  用 `CURLOPT_CUSTOMREQUEST => 'GET'` 搭 `CURLOPT_POSTFIELDS => json_encode(body)` 打
+  `v3/product/search/product-list`。也就是這個設計在鏈上確實存在，只是不在我們打的那一跳。
+
+`filter[…]` 底下**目前後端認得四個 key**（同一個 helper 檔）：`destinations`、
+`product_categories`、`price`、`sale_date`。我們只用了 `sale_date`——`price` 是起價所以沒有
+意義，另外兩個要不透明代碼（`product_categories` 正是當初回假 0 筆那個），要開得先拿到代碼表。
+
+第二個坑決定了設計：既然事後分不出「格式錯」與「真的 0 筆」，格式就得在**送出前**驗死。
+第三個坑決定了失敗方式：拿不到 token 時整支搜尋失敗，**絕不安靜地回一份沒套用日期的清單**——
+那會讓 agent 拿全年份的商品當成「11 月可訂」講出去，而輸出上完全看不出來篩選沒生效。
+
+輸出上對應加了 `dateWindow`，而且 `totalOnSite` 在有日期時改叫 `totalInWindow`
+（同一個名字兩種意思遲早被讀成錯的那個）。語意界線也寫進 `notes`：日期篩選說的是
+「這些商品在這段期間有在賣」，**不是「某一天還有位」**——後者仍然要用
+`check_package_availability`。
 
 ## 實機驗證教會我們的三件事
 
@@ -283,11 +358,33 @@ tool，但答案品質比 A 組差**——因為它相信了起價。
 | 1 | 有沒有找到並使用 `search_products`（而不是點 DOM） | 測 discovery |
 | 2 | 參數對不對：`minRating` 是數字 4.5、`keyword` 用使用者原話 | 測 schema 描述 |
 | 3 | 有沒有設 `minReviews` | 沒設的話 8 則評價的 5.0 星會洗榜 |
-| 3b | **有沒有因為「schema 沒有日期／預算參數」就放棄** | 那是刻意的。應看到 agent 自己拿 `priceFrom`/`priceTo`/`earliestDate` 判斷 |
+| 3b | **有沒有因為「schema 沒有預算參數」就放棄** | 那是刻意的。應看到 agent 自己拿 `priceFrom`/`priceTo` 判斷 |
+| 3c | **有沒有把「8 月 15 日」翻成 `dateFrom`/`dateTo`** | 這兩個參數存在的全部理由。沒用到就是 description 沒寫清楚 |
 | 4 | **最終回答有沒有說「這是起價」** | ⚠️ 第一次跑 B 組沒說，直接把 710 當成 8/15 的價格 |
 | 5 | **有沒有斷言「8/15 訂得到」** | 起價與可訂性都不保證 |
 | 6 | 有沒有說明「590 筆裡只掃了 N 筆」 | 樣本 ≠ 全貌 |
 | 7 | 推薦的組合加總有沒有真的在預算內 | 第一次跑 B 組給的「2,000 內組合」實際是 2,051 |
+
+### 日期篩選的「靜默失效」檢查（實機層，三層測試都抓不到的那一個）
+
+日期篩選有一個失敗模式**只有實機能抓**：站方哪天把 `filter[sale_date]` 改名或搬走，
+回來的 `total` 不會變、HTTP 也是 200，於是我們照樣輸出 `dateWindow: "2026-11-01 ~ 2026-11-30"`，
+agent 照樣告訴使用者「這些 11 月可訂」——**而整批其實沒篩過**。單元測試看不到（fetch 是 mock 的），
+demo 頁也看不到（那頁沒有真的 kkday API）。
+
+檢查方式是**相對比較，不要斷言絕對數字**——站上商品一直在動，我實測同一天內
+無條件 594／596、11 月 537～542 都出現過，任何寫死的數字都會假性失敗：
+
+1. 在真的 kkday 頁面上呼叫 `search_products`，`{ keyword: '東京' }` → 記下 `totalOnSite`
+2. 同一個關鍵字加上下個月整月的 `dateFrom`/`dateTo` → 記下 `totalInWindow`
+3. **`totalInWindow` 必須明顯小於 `totalOnSite`**（實測差距約 8～10%，例如 594 → 542）
+
+兩者相等就是篩選失效了，不管 HTTP 回什麼。順手可以再驗一個：`dateFrom: '2026-02-30'`
+應該回 `not a real calendar date`，而**不是**「這段期間沒有可訂商品」。
+
+> 為什麼不做成自動化 e2e：這支打的是合作方的**正式站**（沒有 stage），有 DataDome 擋機器人、
+> 有實測過的限流，而且資料每天在變。CI 定時打它既不穩定也不禮貌。也刻意不把這個差異比較
+> 做進 tool 本身——那會讓每次搜尋都變成兩倍請求，為了一個一年可能發生一次的改版。
 
 ### Prompt 2：假 0 筆偵測
 

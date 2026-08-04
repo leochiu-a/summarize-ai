@@ -32,7 +32,7 @@ import type { ModelContextTool } from '../webmcp/modelContext'
 import { getProductId, isProductPage } from './productPage'
 import { readPackageAvailability } from './packageAvailability'
 import { checkDate, readAvailabilityMatrix } from './packageCalendar'
-import { searchProducts, type SortId } from './productSearch'
+import { searchProducts, validateDateWindow, type SortId } from './productSearch'
 
 /** Chrome 建議的單次 tool 輸出上限 */
 export const MAX_OUTPUT_CHARS = 1500
@@ -104,9 +104,14 @@ function problem(message: string): string {
 // A. Discovery —— 全站註冊，這是整組裡最重要的一支。
 //
 // 使用者的痛點不是「怎麼下單」，是「怎麼在 584 個東京商品裡找到適合自己的」。SRP 一頁只給
-// 10 筆（584 筆 = 59 頁，分頁按鈕還沒 href），篩選器只有 6 組、沒有日期也沒有評分。
-// 這支 tool 打的是 SRP 自己在用的那個 API，然後用它本來就回的 rating_star 與
-// earliest_sale_date 做收斂 —— 也就是把「後端早就給了、前端沒用」的欄位補成可用的篩選。
+// 10 筆（584 筆 = 59 頁，分頁按鈕還沒 href），而且沒有評分篩選。
+// 這支 tool 打的是 SRP 自己在用的那個 API，然後用它本來就回的 rating_star 做收斂 ——
+// 也就是把「後端早就給了、前端沒用」的欄位補成可用的篩選。
+//
+// 出發日期（dateFrom / dateTo）是另一回事：SRP 側邊欄本來就有這個篩選器，而且是**後端篩的**
+// （`filter[sale_date][from|to]`，實測東京 594 → 542）。這一層要做的不是自己發明篩選，
+// 是把那個「網站有、但要點三層 UI 才碰得到」的能力直接開給 agent。細節與三個會安靜出錯的
+// 坑寫在 productSearch.ts 檔頭。
 //
 // 參數刻意只收「SRP UI 已經有、或明顯該有」的維度。不收年齡、同行人組成、身心狀況這類
 // 個人條件 —— spec §6.3.3 明列那是 over-parameterization 威脅（釣 agent 交出跨站個資 →
@@ -117,13 +122,23 @@ const discoveryTools: ModelContextTool[] = [
     name: 'search_products',
     title: '搜尋 KKday 商品',
     description:
-      'Explores what KKday has for a keyword and returns a candidate set with each product\'s rating, review count, price range, earliest available date and service tags. The site\'s own list page shows only ten per page and has no rating filter, so this is the fast way to survey options. Prices are "from" prices covering all dates and packages — read the range, do not treat it as the price. Use this while the user is still deciding what to book.',
+      // ⚠️ 上限 500 字元（Chrome tool security 頁的 budget），有測試守著。
+      // 「service tags」是舊描述留下來的 —— 輸出裡早就沒有 tags 了，順手拿掉。
+      'Explores what KKday has for a keyword and returns a candidate set with each product\'s rating, review count, price range and earliest available date. Pass dateFrom/dateTo whenever the user names a month or dates: that is the site\'s own departure-date filter, applied server-side. The list page shows only ten per page and has no rating filter, so this is the fast way to survey options. Prices are "from" prices covering all dates and packages — read the range, do not treat it as the price.',
     inputSchema: {
       type: 'object',
       properties: {
         keyword: {
           type: 'string',
           description: 'City, attraction or product name as the user said it, e.g. "東京" or "日本esim".',
+        },
+        dateFrom: {
+          type: 'string',
+          description: 'Start of the departure window, YYYY-MM-DD. For "November" pass the first of the month. Narrows to products on sale then.',
+        },
+        dateTo: {
+          type: 'string',
+          description: 'End of the departure window, YYYY-MM-DD, e.g. "2026-11-30". Either bound may be used alone.',
         },
         minRating: { type: 'number', minimum: 1, maximum: 5, description: 'Minimum star rating, e.g. 4.5.' },
         minReviews: {
@@ -141,20 +156,42 @@ const discoveryTools: ModelContextTool[] = [
       required: ['keyword'],
     },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
-    async execute({ keyword, minRating, minReviews, sort, limit }) {
+    async execute({ keyword, dateFrom, dateTo, minRating, minReviews, sort, limit }) {
       if (typeof keyword !== 'string' || !keyword.trim()) {
         return problem('The "keyword" argument must be a non-empty string, e.g. "東京".')
       }
+      // 日期在這裡就擋掉，不要送出去。站方對「日期不合法」與「這區間沒商品」回的是同一個
+      // 形狀（都是 total:0），送出去之後就再也分不出來是哪一種了。
+      // 驗證邏輯跟 lib 共用一份 —— 包含「2026-02-30 這種格式對但不存在的日子」，
+      // 那種送出去會讓我們對一個不存在的日期宣告「這段期間沒有可訂商品」。
+      const badDate = validateDateWindow(dateFrom, dateTo)
+      if (badDate) return problem(badDate)
       try {
         const result = await searchProducts({
           keyword: keyword.trim(),
+          saleDateFrom: typeof dateFrom === 'string' ? dateFrom : undefined,
+          saleDateTo: typeof dateTo === 'string' ? dateTo : undefined,
           minRating: typeof minRating === 'number' ? minRating : undefined,
           minReviews: typeof minReviews === 'number' ? minReviews : undefined,
           sort: sort as SortId | undefined,
           limit: typeof limit === 'number' ? limit : undefined,
         })
-        // 兩種 0 筆要分開講。混在一起的代價實測過：拿到 scanned:0 的 agent 以為是
+        // 三種 0 筆要分開講。混在一起的代價實測過：拿到 scanned:0 的 agent 以為是
         // 「條件太嚴」，放寬條件重試還是 0，最後放棄 tool 改去爬 DOM。
+        //
+        // 日期區間那種尤其不能講成故障 —— 它是正常結果，而且**換個日期真的有用**，
+        // 跟另外兩種「重試不會有幫助」剛好相反。
+        if (!result.scanned && result.emptyReason === 'dateWindow') {
+          return json({
+            dateWindow: result.dateWindow,
+            scanned: 0,
+            matched: 0,
+            error:
+              `「${keyword.trim()}」在 ${result.dateWindow} 這段期間沒有可訂商品。這是站方日期篩選回的正常結果，` +
+              '不是取資料失敗。放寬或改變日期區間、或拿掉日期重搜，是有意義的重試。',
+            notes: result.notes,
+          })
+        }
         if (!result.scanned) {
           return json({
             scanned: 0,
@@ -180,7 +217,12 @@ const discoveryTools: ModelContextTool[] = [
         // 用 jsonFitList：太長時砍筆數而不是切字串，保證回去的是合法 JSON
         return jsonFitList(
           (products, dropped) => ({
-            totalOnSite: result.total,
+            // 篩選有沒有真的生效要看得見。只寫在 notes 裡不夠 —— 實測 agent 會略過 notes，
+            // 而「以為篩了其實沒篩」是這支 tool 最貴的錯法。
+            ...(result.dateWindow ? { dateWindow: result.dateWindow } : {}),
+            // 有日期篩選時 total 的意思變了（是「這個區間內的商品數」而不是「全站」），
+            // 所以連欄位名一起換。同一個名字兩種意思，遲早會被讀成錯的那個。
+            ...(result.dateWindow ? { totalInWindow: result.total } : { totalOnSite: result.total }),
             scanned: result.scanned,
             matched: result.matched,
             truncated: result.truncated,

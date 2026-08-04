@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resetCsrfCache } from './productSearch'
 import { ALL_TOOLS, MAX_OUTPUT_CHARS, SEARCH_OUTPUT_CHARS, cap, toolsForCurrentPage } from './webmcpTools'
 
 function setPath(path: string) {
@@ -92,11 +93,13 @@ describe('search_products 的 schema 不收個人條件（spec §6.3.3 over-para
   it('沒有年齡 / 同行人 / 身心狀況這類參數', () => {
     const tool = ALL_TOOLS.find((t) => t.name === 'search_products')!
     const keys = Object.keys((tool.inputSchema as { properties: Record<string, unknown> }).properties)
-    expect(keys).toEqual(['keyword', 'minRating', 'minReviews', 'sort', 'limit'])
+    expect(keys).toEqual(['keyword', 'dateFrom', 'dateTo', 'minRating', 'minReviews', 'sort', 'limit'])
     expect(keys.some((k) => /age|child|kid|pregnan|disab|gender|health/i.test(k))).toBe(false)
   })
 
-  it('schema 裡沒有 maxPrice / availableFrom —— 只留兩個站得住的維度', () => {
+  it('schema 裡沒有 maxPrice / availableFrom —— 用不住的維度不留', () => {
+    // maxPrice 比對的是起價；availableFrom 是舊的 client 端做法（拿 earliest_sale_date
+    // 自己比），已經被後端的 dateFrom / dateTo 取代 —— 名字也一起換掉，避免兩種語意混用。
     const tool = ALL_TOOLS.find((t) => t.name === 'search_products')!
     const props = (tool.inputSchema as { properties: Record<string, unknown> }).properties
     for (const k of ['maxPrice', 'availableFrom', 'category']) expect(k in props, k).toBe(false)
@@ -239,6 +242,135 @@ describe('search_products 的輸出永遠是合法 JSON（實測抓到的最嚴�
     expect(parsed.matched).toBe(0)
     expect(parsed.error).toContain('掃過的')
     expect(parsed.error).not.toContain('放寬評分或預算，或改用更廣的關鍵字再試一次')
+  })
+})
+
+// 使用者說「11 月」的時候，agent 唯一該做的事就是把它翻成 dateFrom / dateTo。
+// 之前沒有這兩個參數，實測 agent 會改塞「紅葉」「點燈」這類關鍵字（會被忽略），
+// 最後放棄 tool 直接跳到官網結果 —— 缺的是參數，不是 prompt。
+describe('search_products 的出發日期參數', () => {
+  function stubSrp(items: Record<string, unknown>[], total = 542) {
+    const inits: (RequestInit | undefined)[] = []
+    ;(window as unknown as { __INIT_STATE__: unknown }).__INIT_STATE__ = {
+      state: { security: { CSRFTokenName: 'csrf_token_name', CSRFHash: 'tok' } },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: string, init?: RequestInit) => {
+        inits.push(init)
+        return { ok: true, json: async () => ({ data: { data: items, total, page: 1 } }) } as unknown as Response
+      }),
+    )
+    return inits
+  }
+  const item = (over: Record<string, unknown> = {}) => ({
+    prod_oid: 12319,
+    name: '富士山河口湖一日遊',
+    rating_star: 4.7,
+    rating_count: 5765,
+    min_price: 1480,
+    currency: 'TWD',
+    earliest_sale_date: '20260803',
+    ...over,
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetCsrfCache()
+    delete (window as unknown as { __INIT_STATE__?: unknown }).__INIT_STATE__
+  })
+
+  it('dateFrom / dateTo 會變成站方的 filter[sale_date]（緊湊格式）送出去', async () => {
+    setPath('/zh-tw')
+    const inits = stubSrp([item()])
+    await run('search_products', { keyword: '東京', dateFrom: '2026-11-01', dateTo: '2026-11-30' })
+    const body = new URLSearchParams(String(inits[0]?.body))
+    expect(body.get('filter[sale_date][from]')).toBe('20261101')
+    expect(body.get('filter[sale_date][to]')).toBe('20261130')
+  })
+
+  it('輸出裡看得到 dateWindow —— 篩選有沒有生效不能只寫在 notes 裡', async () => {
+    setPath('/zh-tw')
+    stubSrp([item()])
+    const parsed = JSON.parse(await run('search_products', { keyword: '東京', dateFrom: '2026-11-01', dateTo: '2026-11-30' }))
+    expect(parsed.dateWindow).toBe('2026-11-01 ~ 2026-11-30')
+    // total 的意思變了（是區間內的數量），欄位名要跟著換，不能兩種意思共用一個名字
+    expect(parsed.totalInWindow).toBe(542)
+    expect(parsed.totalOnSite).toBeUndefined()
+  })
+
+  it('沒帶日期時輸出維持 totalOnSite，不憑空多出 dateWindow', async () => {
+    setPath('/zh-tw')
+    stubSrp([item()], 594)
+    const parsed = JSON.parse(await run('search_products', { keyword: '東京' }))
+    expect(parsed.totalOnSite).toBe(594)
+    expect(parsed.dateWindow).toBeUndefined()
+  })
+
+  it('格式不對回可自我修正的訊息，而不是把壞日期送出去', async () => {
+    setPath('/zh-tw')
+    const inits = stubSrp([item()])
+    const parsed = JSON.parse(await run('search_products', { keyword: '東京', dateFrom: '11月' }))
+    expect(parsed.error).toContain('YYYY-MM-DD')
+    expect(inits).toHaveLength(0)
+  })
+
+  // 這條是實測抓到的：`2026-02-30` 格式完全正確，但後端回 total:0，於是我們會對一個
+  // 不存在的日期宣告「這段期間沒有可訂商品」—— 一句關於庫存的錯話。
+  it('格式對但日子不存在時，回的是「這不是真日期」而不是「這段期間沒商品」', async () => {
+    setPath('/zh-tw')
+    const inits = stubSrp([item()])
+    const parsed = JSON.parse(await run('search_products', { keyword: '東京', dateFrom: '2026-02-30' }))
+    expect(parsed.error).toContain('not a real calendar date')
+    expect(parsed.error).not.toContain('沒有可訂商品')
+    expect(inits).toHaveLength(0)
+  })
+
+  // 區間顛倒以前只有 lib 會擋，於是 tool 回的是被 catch 包起來的「搜尋失敗：…」。
+  // 兩層共用同一份驗證之後，它跟其他 schema 錯誤一樣是可自我修正的訊息。
+  it('區間顛倒也走可自我修正的訊息，不是「搜尋失敗」', async () => {
+    setPath('/zh-tw')
+    stubSrp([item()])
+    const parsed = JSON.parse(
+      await run('search_products', { keyword: '東京', dateFrom: '2026-11-30', dateTo: '2026-11-01' }),
+    )
+    expect(parsed.error).toContain('reversed')
+    expect(parsed.error).not.toContain('搜尋失敗')
+  })
+
+  it('區間內 0 筆講成「正常結果、換日期有用」，不是「取資料失敗」', async () => {
+    setPath('/zh-tw')
+    ;(window as unknown as { __INIT_STATE__: unknown }).__INIT_STATE__ = {
+      state: { security: { CSRFTokenName: 'csrf_token_name', CSRFHash: 'tok' } },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ data: { status: 'success', total: 0, recommend_productlist: [{ prod_oid: 1, name: '釜山通行證' }] } }),
+      }) as unknown as Response),
+    )
+    const parsed = JSON.parse(await run('search_products', { keyword: '東京', dateFrom: '2028-11-01', dateTo: '2028-11-30' }))
+    expect(parsed.dateWindow).toBe('2028-11-01 ~ 2028-11-30')
+    expect(parsed.error).toContain('沒有可訂商品')
+    expect(parsed.error).not.toContain('取資料本身失敗')
+    expect(parsed.error).toContain('有意義的重試')
+  })
+
+  it('搜尋結果不會被 recommend_productlist 的商品汙染（那是不相干的推薦）', async () => {
+    setPath('/zh-tw')
+    ;(window as unknown as { __INIT_STATE__: unknown }).__INIT_STATE__ = {
+      state: { security: { CSRFTokenName: 'csrf_token_name', CSRFHash: 'tok' } },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ data: { status: 'success', total: 0, recommend_productlist: [{ prod_oid: 138477, name: '釜山通行證 VISIT BUSAN PASS' }] } }),
+      }) as unknown as Response),
+    )
+    const out = await run('search_products', { keyword: '東京', dateFrom: '2028-11-01' })
+    expect(out).not.toContain('釜山')
   })
 })
 

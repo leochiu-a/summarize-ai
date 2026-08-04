@@ -26,7 +26,10 @@ export interface ModelContextTool {
   title?: string
   /** 說明「做什麼 + 何時該用」。Chrome 建議 ≤500 字元。 */
   description: string
-  /** JSON Schema。選填（無參數的 tool 可省略）。 */
+  /**
+   * JSON Schema。選填（無參數的 tool 可省略）。
+   * Chrome 建議每個參數的 `description` ≤150 字元、參數名 ≤30 字元。
+   */
   inputSchema?: object
   /** 回傳值型別是 any：純字串或小 JSON 都合法。Chrome 建議輸出 ≤1.5K 字元。 */
   execute: (input: Record<string, unknown>) => Promise<unknown>
