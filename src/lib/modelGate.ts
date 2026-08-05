@@ -19,6 +19,69 @@
 // 模組級同步快取：最近一次 availability 校正結果。null = 還沒校正過（冷啟動）。
 let cached: Availability | null = null
 
+/**
+ * 最近一次 probe 的原始線索。unavailable 有太多可能原因（API 不存在 / availability() 丟例外 /
+ * 回報 unavailable 但沒說為什麼），只丟一句「裝置不支援」使用者無從判斷，所以把原始結果留著給 UI 展開。
+ */
+export interface GateDiagnostics {
+  apiPresent: boolean // window.LanguageModel 是否存在
+  secureContext: boolean | null // 頁面是否為安全內容（null = 尚未偵測）
+  origin: string // 頁面 origin（protocol 是 http 還是 https 是關鍵線索）
+  availability: Availability | null // availability() 的原始回傳（沒問到為 null）
+  probeError: string // probe 過程的例外訊息（沒有為空字串）
+  params: string // LanguageModel.params() 的原始結果（或失敗訊息）
+  chromeVersion: string // 從 UA 解析的 Chrome 版本
+  userAgent: string
+}
+
+const NO_DIAGNOSTICS: GateDiagnostics = {
+  apiPresent: false,
+  secureContext: null,
+  origin: '',
+  availability: null,
+  probeError: '尚未偵測',
+  params: '',
+  chromeVersion: '',
+  userAgent: '',
+}
+
+let diagnostics: GateDiagnostics = NO_DIAGNOSTICS
+
+/** 讀取最近一次 probe 的原始線索（給錯誤 UI 展開「偵測細節」用）。 */
+export function getGateDiagnostics(): GateDiagnostics {
+  return diagnostics
+}
+
+// 內建 AI 的介面全是 [SecureContext]：http 頁面（localhost 除外）根本不會曝光 LanguageModel。
+// content script 跟頁面共用同一個 realm 的安全性判定，所以 extension 也救不了非 HTTPS 的頁面。
+function inSecureContext(): boolean {
+  return typeof isSecureContext === 'undefined' || isSecureContext
+}
+
+/**
+ * unavailable 的兩種性質不同的成因，UI 要用完全不同的說法：
+ * - `insecure-page`：**這個網站**不適用（http 頁面連 API 都不會有），換頁就好、跟裝置無關。
+ * - `device`：裝置或 Chrome 版本不符，是使用者要去處理的事。
+ * 混在一起講會讓 http 頁面的人白繞一圈去查硬體。
+ */
+export type UnavailableKind = 'insecure-page' | 'device'
+
+export function unavailableKind(): UnavailableKind {
+  return inSecureContext() ? 'device' : 'insecure-page'
+}
+
+/** unavailable 要對使用者說的那句話（依 {@link unavailableKind} 分流）。 */
+export function unavailableMessage(): string {
+  if (unavailableKind() === 'insecure-page') {
+    return '這個網站不是 HTTPS，Chrome 內建 AI 在這裡不會啟用，小夥伴幫不上忙——到 https 的頁面就能用，跟你的裝置無關。'
+  }
+  return '這台裝置無法使用內建 AI 模型（需要 Chrome 138+ 且符合硬體需求）。'
+}
+
+function messageOf(err: unknown): string {
+  return err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+}
+
 type Listener = (availability: Availability) => void
 const listeners = new Set<Listener>()
 
@@ -46,11 +109,51 @@ export async function refreshGeminiNano(): Promise<Availability> {
 }
 
 async function probeAvailability(): Promise<Availability> {
-  if (typeof LanguageModel === 'undefined') return 'unavailable'
-  try {
-    return await LanguageModel.availability()
-  } catch {
+  const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  const chromeVersion = /Chrome\/([\d.]+)/.exec(userAgent)?.[1] ?? '（UA 不是 Chromium）'
+  const secureContext = inSecureContext()
+  const base = {
+    userAgent,
+    chromeVersion,
+    secureContext,
+    origin: typeof location === 'undefined' ? '' : location.origin,
+  }
+
+  if (typeof LanguageModel === 'undefined') {
+    diagnostics = {
+      ...base,
+      apiPresent: false,
+      availability: null,
+      probeError: secureContext
+        ? 'LanguageModel 未定義：這個環境取不到 Prompt API（Chrome 版本過舊，或 API 未在此 context 曝光）'
+        : 'LanguageModel 未定義：頁面不是安全內容（非 HTTPS 也非 localhost），內建 AI 介面一律不曝光',
+      params: '',
+    }
     return 'unavailable'
+  }
+
+  try {
+    const availability = await LanguageModel.availability()
+    diagnostics = { ...base, apiPresent: true, availability, probeError: '', params: await probeParams() }
+    return availability
+  } catch (err) {
+    diagnostics = {
+      ...base,
+      apiPresent: true,
+      availability: null,
+      probeError: `availability() 丟出例外 — ${messageOf(err)}`,
+      params: '',
+    }
+    return 'unavailable'
+  }
+}
+
+// params() 只是輔助線索（unavailable 時通常回 null），失敗不影響判斷，把訊息記下來就好
+async function probeParams(): Promise<string> {
+  try {
+    return JSON.stringify(await LanguageModel.params())
+  } catch (err) {
+    return `params() 失敗 — ${messageOf(err)}`
   }
 }
 
@@ -103,6 +206,7 @@ export function onGateChange(cb: Listener): () => void {
 export function resetGateForTest(): void {
   cached = null
   downloadPromise = null
+  diagnostics = NO_DIAGNOSTICS
   listeners.clear()
 }
 

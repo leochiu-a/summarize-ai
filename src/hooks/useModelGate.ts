@@ -17,6 +17,7 @@ import {
   geminiNanoAvailabilitySync,
   onGateChange,
   refreshGeminiNano,
+  unavailableMessage,
 } from '../lib/modelGate'
 
 // unknown：還沒判斷（冷啟動校正中）
@@ -34,8 +35,7 @@ export interface ModelGate {
   accept: () => Promise<void> // 使用者同意 → 觸發下載（須在點擊手勢內呼叫）
 }
 
-// 裝置不支援內建 AI 的錯誤訊息（同步初值與冷啟動校正共用）
-const UNAVAILABLE_MSG = '這台裝置無法使用內建 AI 模型（需要 Chrome 138+ 且符合硬體需求）。'
+// 內建 AI 不可用的錯誤訊息由 modelGate 依實際線索決定（非 HTTPS 頁面 vs 裝置不符）
 
 // 把 availability 對應成初始 gate 狀態
 function stateFromAvailability(a: ReturnType<typeof geminiNanoAvailabilitySync>): GateState {
@@ -50,8 +50,8 @@ export function useModelGate(): ModelGate {
   const initial = stateFromAvailability(geminiNanoAvailabilitySync())
   const [state, setState] = useState<GateState>(initial)
   const [downloadPct, setDownloadPct] = useState<number | null>(null)
-  // 同步初值就是 error（裝置不支援）時，一併帶上錯誤訊息，避免顯示空白錯誤
-  const [error, setError] = useState(initial === 'error' ? UNAVAILABLE_MSG : '')
+  // 同步初值就是 error（內建 AI 不可用）時，一併帶上錯誤訊息，避免顯示空白錯誤
+  const [error, setError] = useState(initial === 'error' ? unavailableMessage() : '')
 
   // 冷啟動校正：只在還沒判斷（unknown）時 async refresh 一次
   useEffect(() => {
@@ -60,7 +60,7 @@ export function useModelGate(): ModelGate {
     void refreshGeminiNano().then((a) => {
       if (!alive) return
       if (a === 'unavailable') {
-        setError(UNAVAILABLE_MSG)
+        setError(unavailableMessage())
         setState('error')
       } else {
         setState(a === 'available' ? 'ready' : 'consent')

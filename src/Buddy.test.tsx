@@ -429,14 +429,19 @@ describe('Buddy 第一次進來（模型未下載）的 consent 流程', () => {
     expect(calls.destroy).toBe(1) // 下載用的 session 有收掉
   })
 
-  it('裝置不支援（LanguageModel 不存在）→ 顯示錯誤，不給下載按鈕', async () => {
+  it('裝置不支援（LanguageModel 不存在）→ 不自動展開擋畫面，點頭像才看到錯誤', async () => {
     seedArticle()
     resetGateForTest()
     vi.stubGlobal('LanguageModel', undefined)
 
     render(<Buddy />)
 
-    await waitFor(() => expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy())
+    // 校正完仍只露頭像：錯誤沒有行動可做，不該一進頁面就蓋住內容
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Buddy AI' })).toBeTruthy())
+    expect(screen.queryByText(/無法使用內建 AI 模型/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buddy AI' }))
+    expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: '下載並啟用' })).toBeNull()
   })
 })

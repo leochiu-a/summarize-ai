@@ -118,6 +118,18 @@ Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**�
 - 未就緒時先徵求同意才下載（Chrome 要求模型下載必須在**使用者手勢**內觸發），下載時顯示進度。
 - 下載完成後廣播，讓同一頁其他等待中的 UI 就地復活、不用重整。
 - B 組（翻譯）有獨立 gate，首次點翻譯按鈕即為下載手勢。
+- **泡泡一律可收合**（點頭像或右上角 ×）。consent / downloading / done 有行動可做，進入時自動展開；
+  `error`（裝置不支援）沒有行動可做，**預設收合**只露頭像——它以前是自動展開又關不掉，會蓋住頁面。
+- **內建 AI 的介面全是 `[SecureContext]`**：http 頁面（`localhost` 除外）連 `LanguageModel` 都不會存在，
+  content script 跟頁面共用同一個 realm 的安全性判定，extension 身分救不了。manifest 的 match 是 `*://*.kkday.com/*`
+  （含 http），所以像 `http://autotest-service.sit.kkday.com:8080` 這種內部工具頁會注入小夥伴但一定 `unavailable`。
+  這種情況由 `unavailableKind()` 分流成 `insecure-page`：泡泡標題改成**「這個網站不適用」**、用中性灰字
+  （`.notice`，不是紅色 `.error`），文案講「換到 https 頁面就能用、跟你的裝置無關」，不要讓人白繞一圈去查硬體。
+- `unavailable` 的成因太多（非安全內容 / API 不存在 / `availability()` 丟例外 / 硬體或空間不足 / 下載被延後），
+  所以每次 probe 都把原始線索記在 `modelGate` 的 `getGateDiagnostics()`（Chrome 版本、API 是否存在、
+  `availability()` 與 `params()` 原始值、是否安全內容、頁面 origin、例外訊息、UA），
+  錯誤泡泡的「偵測細節」把它攤開並可一鍵複製。
+  更底層的狀態要看 `chrome://on-device-internals`。
 
 ---
 

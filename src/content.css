@@ -207,6 +207,11 @@
 .error {
   color: #d14343;
 }
+/* 中性告知（不是錯誤，例如「這個網站不適用」）：不要用紅字嚇人 */
+.notice {
+  color: #2d2b3d;
+  line-height: 1.6;
+}
 
 /* 思考時的碎念：斜體灰字，字尾三個點依序閃動 */
 .thinking-text {
@@ -339,6 +344,50 @@
   display: block;
   width: 22px;
   height: 22px;
+}
+
+/* 泡泡右上角的關閉鈕（consent gate 用：錯誤訊息沒有行動可做，至少要能關掉） */
+.bubble-close {
+  all: unset;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  color: #6b6980;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.bubble-close:hover {
+  background: #26243a11;
+  color: #26243a;
+}
+
+/* 內建 AI 偵測細節：等寬小字的 key/value 清單，只在使用者主動攤開時出現 */
+.gate-diagnostics {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #2d2b3d;
+}
+.gate-diagnostics dl {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.gate-diagnostics dl > div {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 8px;
+}
+.gate-diagnostics dt {
+  color: #6b6980;
+}
+.gate-diagnostics dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
 }
 
 .tail {

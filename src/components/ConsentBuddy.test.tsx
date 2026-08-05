@@ -64,11 +64,50 @@ describe('ConsentBuddy（同意才下載）', () => {
     expect(screen.queryByText(/要現在下載並啟用嗎/)).toBeNull()
   })
 
-  it('裝置不支援（unavailable）→ 顯示錯誤，不顯示下載按鈕', () => {
+  it('裝置不支援（unavailable）→ 預設收合不擋畫面，點頭像才顯示錯誤', () => {
     setGateAvailabilityForTest('unavailable')
     render(<ConsentBuddy />)
 
+    // 沒有行動可做的錯誤不該自動展開擋住頁面
+    expect(screen.queryByText(/無法使用內建 AI 模型/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buddy AI' }))
     expect(screen.getByText(/無法使用內建 AI 模型/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: '下載並啟用' })).toBeNull()
+  })
+
+  it('錯誤泡泡可以關掉，也能攤開偵測細節', () => {
+    setGateAvailabilityForTest('unavailable')
+    render(<ConsentBuddy />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buddy AI' }))
+    fireEvent.click(screen.getByRole('button', { name: '偵測細節' }))
+    expect(screen.getByText('LanguageModel API')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '關閉' }))
+    expect(screen.queryByText(/無法使用內建 AI 模型/)).toBeNull()
+  })
+
+  it('http 頁面（非安全內容）→ 說「這個網站不適用」，不要怪到裝置頭上', async () => {
+    vi.stubGlobal('isSecureContext', false)
+    vi.stubGlobal('LanguageModel', undefined)
+    render(<ConsentBuddy />)
+
+    // 一樣預設收合（不擋畫面），點頭像才看到說明
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Buddy AI' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Buddy AI' }))
+
+    expect(screen.getByText('這個網站不適用')).toBeTruthy()
+    expect(screen.getByText(/不是 HTTPS/)).toBeTruthy()
+    expect(screen.queryByText(/這台裝置/)).toBeNull()
+  })
+
+  it('同意提示可以關掉（點頭像收合），不會被 state 重新打開', () => {
+    setGateAvailabilityForTest('downloadable')
+    render(<ConsentBuddy />)
+
+    expect(screen.getByText(/要現在下載並啟用嗎/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '關閉' }))
+    expect(screen.queryByText(/要現在下載並啟用嗎/)).toBeNull()
   })
 })

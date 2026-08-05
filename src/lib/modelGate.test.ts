@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   downloadGeminiNano,
   geminiNanoAvailabilitySync,
+  getGateDiagnostics,
   onGateChange,
   refreshGeminiNano,
   resetGateForTest,
+  unavailableMessage,
 } from './modelGate'
 
 // 造一個可控的 LanguageModel stub（gate 用它當 base-model probe）。
@@ -56,6 +58,42 @@ describe('refreshGeminiNano', () => {
       },
     })
     expect(await refreshGeminiNano()).toBe('unavailable')
+  })
+
+  it('診斷資訊留下原始線索：API 不存在會寫進 probeError', async () => {
+    vi.stubGlobal('LanguageModel', undefined)
+    await refreshGeminiNano()
+
+    const d = getGateDiagnostics()
+    expect(d.apiPresent).toBe(false)
+    expect(d.probeError).toMatch(/LanguageModel 未定義/)
+    expect(d.secureContext).toBe(true) // jsdom 預設是安全內容
+  })
+
+  it('availability throw 的例外訊息會留在診斷資訊裡', async () => {
+    vi.stubGlobal('LanguageModel', {
+      availability: async () => {
+        throw new Error('boom')
+      },
+    })
+    await refreshGeminiNano()
+
+    expect(getGateDiagnostics().probeError).toMatch(/boom/)
+  })
+})
+
+describe('unavailableMessage', () => {
+  it('安全內容 → 講裝置需求', () => {
+    expect(unavailableMessage()).toMatch(/這台裝置/)
+  })
+
+  it('非安全內容（http 頁面）→ 講頁面不是 HTTPS，別讓人去查硬體', async () => {
+    vi.stubGlobal('isSecureContext', false)
+    vi.stubGlobal('LanguageModel', undefined)
+
+    expect(unavailableMessage()).toMatch(/不是 HTTPS/)
+    await refreshGeminiNano()
+    expect(getGateDiagnostics().probeError).toMatch(/不是安全內容/)
   })
 
   it('狀態有變動才通知 listeners', async () => {
