@@ -1,5 +1,6 @@
-import { EmojiIcon } from '../components/EmojiIcon'
-import { SUMMARY_TYPES, TONES } from '../lib/settings'
+import { useState } from 'react'
+import { DisabledSitesPanel } from './DisabledSitesPanel'
+import { SettingsPanel } from './SettingsPanel'
 import { useSettings } from '../hooks/useSettings'
 
 function assetUrl(path: string): string {
@@ -8,12 +9,11 @@ function assetUrl(path: string): string {
 
 const spriteUrl = assetUrl('assets/sprite.png')
 
-export function PopupApp() {
-  const { settings, update } = useSettings()
+type View = 'settings' | 'sites'
 
-  if (!settings) {
-    return <div className="loading">載入中⋯</div>
-  }
+export function PopupApp() {
+  const settingsState = useSettings()
+  const [view, setView] = useState<View>('settings')
 
   return (
     <main className="panel">
@@ -25,54 +25,28 @@ export function PopupApp() {
         </div>
       </header>
 
-      <section className="section" style={{ '--i': 0 } as React.CSSProperties}>
-        <div className="section-label">
-          <span className="num">01</span>
-          <span className="name">語氣</span>
-        </div>
-        <div className="tone-grid">
-          {TONES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={settings.tone === t.id ? 'tone on' : 'tone'}
-              onClick={() => void update({ tone: t.id })}
-              aria-pressed={settings.tone === t.id}
-            >
-              <span className="tone-emoji">
-                <EmojiIcon code={t.code} label={t.label} />
-              </span>
-              <span className="tone-label">{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      <nav className="tabbar" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'settings'}
+          className={view === 'settings' ? 'tab on' : 'tab'}
+          onClick={() => setView('settings')}
+        >
+          設定
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'sites'}
+          className={view === 'sites' ? 'tab on' : 'tab'}
+          onClick={() => setView('sites')}
+        >
+          停用清單
+        </button>
+      </nav>
 
-      <section className="section" style={{ '--i': 1 } as React.CSSProperties}>
-        <div className="section-label">
-          <span className="num">02</span>
-          <span className="name">摘要類型</span>
-        </div>
-        <div className="segments">
-          {SUMMARY_TYPES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={settings.summaryType === s.id ? 'seg on' : 'seg'}
-              onClick={() => void update({ summaryType: s.id })}
-              aria-pressed={settings.summaryType === s.id}
-              title={s.hint}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <p className="hint">{SUMMARY_TYPES.find((s) => s.id === settings.summaryType)?.hint}</p>
-      </section>
-
-      <footer className="foot">
-        <span className="blink">▚</span> 設定會立即套用到下一次摘要
-      </footer>
+      {view === 'settings' ? <SettingsPanel {...settingsState} /> : <DisabledSitesPanel />}
     </main>
   )
 }

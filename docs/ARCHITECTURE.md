@@ -11,6 +11,23 @@
 
 ---
 
+## 小螢幕隱藏小夥伴
+
+樣式在 [`src/content.css`](../src/content.css) 的 `:host` 規則。窄螢幕（手機寬度、或視窗窄到跟手機差不多，
+`max-width: 768px`）直接 `display: none` 整個 shadow host，浮動頭像跟泡泡都不會出現。純 CSS media query，
+不用 JS 判斷裝置，跟著視窗尺寸即時反應（不用重整頁面）。
+
+- 只藏這顆浮動小夥伴。商品頁卡片等注入到頁面版面裡的功能（見下方〈商品重點摘要卡片〉）走頁面自己的
+  響應式排版，不受這個開關影響，也不需要。
+- 理由呼應本文件開頭與 AGENTS.md 提到的限制：內建 AI 本來就不支援 mobile，讓浮動頭像在窄版排版占位、
+  擋內容沒有意義。
+- **demo 環境的陷阱**：`demo/` 底下的頁面都沒有 `<meta name="viewport">`，用 Chrome 的 mobile 裝置模擬器
+  縮窄視窗時，頁面會退回瀏覽器對「非響應式網站」的預設版面寬度（980px），`window.innerWidth` 讀到的不是
+  你設的裝置寬度，media query 也不會命中——這是 demo 頁面本身的限制，不是這段 CSS 的 bug。真正的
+  kkday.com 頁面有 viewport meta，行為正常。要在 demo 驗證，得自己在 console 補一個 viewport meta tag。
+
+---
+
 ## 內容擷取（頁面摘要）
 
 程式在 [`src/lib/summarizer.ts`](../src/lib/summarizer.ts)。
@@ -107,6 +124,35 @@ Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**�
 - 在評分列下方注入「翻譯所有評論」按鈕（[`src/components/ReviewTranslateButton.tsx`](../src/components/ReviewTranslateButton.tsx)）。
 - 一鍵用 LanguageDetector 偵測每則評論語言，把非頁面語系的評論用 Translator 逐則就地翻成閱讀者語言，可切換顯示原文 / 譯文。
 - 用 B 組模型，有獨立的下載 gate（首次點按鈕即為下載手勢）。
+
+---
+
+## 站點停用清單（per-hostname 關掉 AI 功能）
+
+程式在 [`src/lib/disabledSites.ts`](../src/lib/disabledSites.ts)（storage）、
+[`src/hooks/useDisabledSites.ts`](../src/hooks/useDisabledSites.ts) /
+[`src/hooks/useActiveTabHost.ts`](../src/hooks/useActiveTabHost.ts)（popup 用的 hook）、
+[`src/popup/DisabledSitesPanel.tsx`](../src/popup/DisabledSitesPanel.tsx)（popup 的「停用清單」分頁）。
+
+- 存 `chrome.storage.local`，跟 [`settings.ts`](../src/lib/settings.ts) 同一套模式：模組級同步真相來源 +
+  `storage.onChanged` 廣播，跨 popup 分頁 / content script 即時同步。
+- 比對粒度是**完整 hostname**（正規化成小寫），不是 apex domain——停用 `dev.kkday.com` 不會連帶停用
+  `www.kkday.com` 或 `kkday.com` 本身。這是刻意的：dev / stage 環境常常需要跟正式站分開判斷要不要吵。
+- 清單裡每一筆也可以是帶 `*` 的**萬用字元 pattern**（例如 `*.sit.kkday.com`）。`hostMatchesPattern()`
+  把 `*` 轉成 regex 的 `.*`（比對任意字元，含點）再整串 anchor 比對，所以 `*.sit.kkday.com` 會吃掉
+  `dev.sit.kkday.com`、`member.sit.kkday.com`……但不含 `sit.kkday.com` 自己（`*.` 前面一定要有東西）。
+  沒有 `*` 的 entry 走原本的完整字串相等比對，兩種格式共用同一個陣列、同一份 storage。
+- `findMatchingEntry(hosts, host)` 回傳實際命中的那筆 entry（可能是完整 hostname，也可能是 pattern），
+  UI（popup 的目前網站開關 / 一鍵停用按鈕）靠這個分辨「這個 host 是被自己的 entry 停用，還是被某條 pattern
+  連坐」——被 pattern 命中時開關會鎖住（disabled），不會生出一筆多餘的完整 hostname 例外，使用者要嘛去清單
+  改 pattern，要嘛留著讓 pattern 繼續管。
+- 真正的關卡在 [`content.tsx`](../src/content.tsx) 進入點最前面：`await isHostDisabled(location.hostname)`，
+  停用就直接 `return`，什麼都不掛載（小夥伴、商品頁注入一併跳過）。**不影響** `webmcp.ts`——那是獨立宣告的
+  content script，讀頁面事實不用內建 AI，不受這個開關管。
+- 因為是 content script 一進來就決定要不要掛載，套用時機是**下次載入頁面**；已經開著的分頁停用後要重新整理才生效。
+- popup 端讀「目前分頁 hostname」用 `chrome.tabs.query({ active: true, currentWindow: true })`，manifest 額外要
+  `activeTab` 權限（開 popup 這個動作本身就是使用者手勢，換得當前分頁的 url 讀取）。讀不到（非 http(s) 頁面等）
+  時 `useActiveTabHost` 回 `null`，UI 顯示提示、不硬猜。
 
 ---
 
