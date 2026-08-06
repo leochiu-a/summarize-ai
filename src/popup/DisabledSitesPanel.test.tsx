@@ -88,4 +88,32 @@ describe('DisabledSitesPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '啟用' }))
     await waitFor(() => expect(screen.getByText(/目前沒有停用任何網站/)).toBeTruthy())
   })
+
+  it('可以新增 * 萬用字元 pattern，清單裡標示「規則」badge', async () => {
+    stubActiveTab(null)
+    render(<DisabledSitesPanel />)
+
+    fireEvent.change(screen.getByPlaceholderText(/輸入網域/), { target: { value: '*.sit.kkday.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '新增' }))
+
+    await waitFor(() => expect(screen.getByText('*.sit.kkday.com')).toBeTruthy())
+    expect(screen.getByText('規則')).toBeTruthy()
+  })
+
+  it('目前網站被既有的 pattern 命中（非完整 hostname）→ 開關與一鍵按鈕都不能按，導去清單編輯規則', async () => {
+    stubActiveTab('https://dev.sit.kkday.com/')
+    render(<DisabledSitesPanel />)
+
+    fireEvent.change(screen.getByPlaceholderText(/輸入網域/), { target: { value: '*.sit.kkday.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '新增' }))
+
+    await waitFor(() => expect(screen.getByText(/符合停用規則/)).toBeTruthy())
+    expect(screen.getByText('OFF')).toBeTruthy()
+
+    const toggle = screen.getByRole('button', { name: /符合停用規則/ }) as HTMLButtonElement
+    expect(toggle.disabled).toBe(true)
+
+    const quickAdd = screen.getByRole('button', { name: /目前網站已被規則停用/ }) as HTMLButtonElement
+    expect(quickAdd.disabled).toBe(true)
+  })
 })

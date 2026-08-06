@@ -138,6 +138,14 @@ Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**�
   `storage.onChanged` 廣播，跨 popup 分頁 / content script 即時同步。
 - 比對粒度是**完整 hostname**（正規化成小寫），不是 apex domain——停用 `dev.kkday.com` 不會連帶停用
   `www.kkday.com` 或 `kkday.com` 本身。這是刻意的：dev / stage 環境常常需要跟正式站分開判斷要不要吵。
+- 清單裡每一筆也可以是帶 `*` 的**萬用字元 pattern**（例如 `*.sit.kkday.com`）。`hostMatchesPattern()`
+  把 `*` 轉成 regex 的 `.*`（比對任意字元，含點）再整串 anchor 比對，所以 `*.sit.kkday.com` 會吃掉
+  `dev.sit.kkday.com`、`member.sit.kkday.com`……但不含 `sit.kkday.com` 自己（`*.` 前面一定要有東西）。
+  沒有 `*` 的 entry 走原本的完整字串相等比對，兩種格式共用同一個陣列、同一份 storage。
+- `findMatchingEntry(hosts, host)` 回傳實際命中的那筆 entry（可能是完整 hostname，也可能是 pattern），
+  UI（popup 的目前網站開關 / 一鍵停用按鈕）靠這個分辨「這個 host 是被自己的 entry 停用，還是被某條 pattern
+  連坐」——被 pattern 命中時開關會鎖住（disabled），不會生出一筆多餘的完整 hostname 例外，使用者要嘛去清單
+  改 pattern，要嘛留著讓 pattern 繼續管。
 - 真正的關卡在 [`content.tsx`](../src/content.tsx) 進入點最前面：`await isHostDisabled(location.hostname)`，
   停用就直接 `return`，什麼都不掛載（小夥伴、商品頁注入一併跳過）。**不影響** `webmcp.ts`——那是獨立宣告的
   content script，讀頁面事實不用內建 AI，不受這個開關管。

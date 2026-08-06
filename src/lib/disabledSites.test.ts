@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  findMatchingEntry,
   getDisabledHosts,
+  hostMatchesPattern,
   isHostDisabled,
+  isPattern,
   resetDisabledHostsForTest,
   setHostDisabled,
 } from './disabledSites'
@@ -51,5 +54,40 @@ describe('setHostDisabled', () => {
     await setHostDisabled('dev.kkday.com', true)
     expect(await isHostDisabled('kkday.com')).toBe(false)
     expect(await isHostDisabled('www.kkday.com')).toBe(false)
+  })
+})
+
+describe('萬用字元 pattern', () => {
+  it('isPattern 只認含 * 的 entry', () => {
+    expect(isPattern('*.sit.kkday.com')).toBe(true)
+    expect(isPattern('dev.kkday.com')).toBe(false)
+  })
+
+  it('hostMatchesPattern：*.sit.kkday.com 吃掉任何子網域，但不含自己', () => {
+    expect(hostMatchesPattern('dev.sit.kkday.com', '*.sit.kkday.com')).toBe(true)
+    expect(hostMatchesPattern('member.sit.kkday.com', '*.sit.kkday.com')).toBe(true)
+    expect(hostMatchesPattern('sit.kkday.com', '*.sit.kkday.com')).toBe(false)
+    expect(hostMatchesPattern('kkday.com', '*.sit.kkday.com')).toBe(false)
+  })
+
+  it('沒有 * 的 entry 只做完整字串相等比對', () => {
+    expect(hostMatchesPattern('dev.kkday.com', 'dev.kkday.com')).toBe(true)
+    expect(hostMatchesPattern('dev.kkday.com.evil.com', 'dev.kkday.com')).toBe(false)
+  })
+
+  it('setHostDisabled 存 pattern 後，isHostDisabled 對比對到的 host 回 true', async () => {
+    await setHostDisabled('*.sit.kkday.com', true)
+    expect(await isHostDisabled('dev.sit.kkday.com')).toBe(true)
+    expect(await isHostDisabled('autotest.sit.kkday.com')).toBe(true)
+    expect(await isHostDisabled('kkday.com')).toBe(false)
+  })
+
+  it('findMatchingEntry 回傳實際命中的那筆 entry（pattern 或完整 hostname）', async () => {
+    await setHostDisabled('dev.kkday.com', true)
+    await setHostDisabled('*.sit.kkday.com', true)
+    const hosts = await getDisabledHosts()
+    expect(findMatchingEntry(hosts, 'dev.kkday.com')).toBe('dev.kkday.com')
+    expect(findMatchingEntry(hosts, 'member.sit.kkday.com')).toBe('*.sit.kkday.com')
+    expect(findMatchingEntry(hosts, 'kkday.com')).toBeNull()
   })
 })
