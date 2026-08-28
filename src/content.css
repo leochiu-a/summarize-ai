@@ -7,6 +7,15 @@
   interpolate-size: allow-keywords;
 }
 
+/* 小螢幕（手機寬度、或視窗窄到跟手機差不多）整個不顯示：
+   浮動頭像在窄版排版下會擋內容，且內建 AI 本來就不支援 mobile（見 AGENTS.md）。
+   只藏這顆浮動小夥伴，商品頁卡片等頁面內注入的功能走頁面自己的排版，不受影響。 */
+@media (max-width: 768px) {
+  :host {
+    display: none;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
