@@ -4,7 +4,7 @@
 
 擴充套件只在 `kkday.com`（含子網域）運作。下面〈WebMCP tool 層〉以外的所有功能，推論都用 Chrome 內建 AI 在本機執行、內容不上傳（WebMCP 那層不用內建 AI，推論在使用者自己帶來的 agent）。內建 AI 分兩組：
 
-- **A 組**（共用 Gemini Nano）：Summarizer / Prompt（`LanguageModel`）/ Rewriter — 頁面摘要、商品摘要卡片、評論潤飾、值不值得分析。其中 Rewriter 尚未進穩定版，評論潤飾會退回 Prompt API（見下方〈評論潤飾〉）。
+- **A 組**（共用 Gemini Nano）：Summarizer / Prompt（`LanguageModel`）/ Rewriter — 頁面摘要、商品摘要卡片、評論頁 AI 工具列、值不值得分析。其中 Rewriter 尚未進穩定版，評論潤飾會退回 Prompt API（見下方〈評論頁 AI 工具列〉）。
 - **B 組**（獨立模型）：Translator / LanguageDetector — 翻譯所有評論。
 
 兩組各自有自己的「可用性 / 下載」gate，見下方〈Model gate〉。
@@ -77,7 +77,7 @@
 
 ## 預熱與 session 生命週期
 
-三個用 Gemini Nano 的功能（頁面摘要、商品摘要卡片、值不值得買）都改成「**打開只展開 + 背景預熱 → 按鈕才推論**」。動機是 [Chrome 內建 AI Do's and Don'ts](https://developer.chrome.com/docs/ai/built-in-ai-dos-donts)：
+四個用 Gemini Nano 的入口（頁面摘要、商品摘要卡片、值不值得買、評論頁工具列）都是「**先預熱、按鈕才推論**」。前三個的預熱時機是「打開的那一刻」（點頭像展開泡泡、卡片出現在眼前）；評論頁工具列沒有「打開」這個動作，它**一進頁面就預熱**——那頁的意圖夠明確（人就是來寫評論的），cold start 剛好藏在他打字的那幾分鐘裡。預熱刻意排在注入層最前面（`bootstrapToolbar()` 的第一件事），不等 textarea 出現、不等 React 掛載，也不排在 `refreshGeminiNano()` 後面——那幾段等待對 cold start 沒有任何貢獻。gate 未就緒時不硬做（會變成沒有手勢就觸發下載），改訂閱 `onGateChange`，使用者同意下載完成後就地補上。動機是 [Chrome 內建 AI Do's and Don'ts](https://developer.chrome.com/docs/ai/built-in-ai-dos-donts)：
 
 - 〈Prepare the model at a reasonable time〉：在「使用者意圖已明確」的時刻（展開泡泡、卡片出現在眼前）就先 `create()`，把 cold start 藏在他讀邀請文字的那幾秒；不要等按下「開始」才建。
 - 〈Set initial prompts during creation〉：規則類指示（結論先行、繁中、不得杜撰、語氣）改在 `create({ initialPrompts: [{ role: 'system', ... }] })` 送出，預熱時就處理完；真正的 prompt 只帶資料（商品事實 / 商品說明內文）。
@@ -89,31 +89,69 @@
 - [`src/lib/warmSession.ts`](../src/lib/warmSession.ts) 是共用容器 `createWarmSlot(create)`，提供 `warm(key)`（冪等、in-flight 去重）/ `take(key)`（命中預熱＝零等待）/ `release()`。`key` 不同（使用者改了語氣或摘要類型）會自動收掉舊的重建。
 - 各 lib 各持有**自己的 slot**（`summarizer.ts` / `worthIt.ts` / `productSummary.ts`）：商品摘要卡片與「值不值得買」都用 `LanguageModel` 且跑在同一個 content script context，共用一個 slot 會互相把對方的 session 收掉。
 - 各 hook 對外只多一支 `prepare()`：**有快取直接把上次結果放出來（不跑模型也不預熱），沒快取才背景預熱**。預熱失敗一律吞掉不冒錯誤 UI——它是機會財，真正的錯誤留給執行時那條路徑。
-- 使用者手勢：buddy 的預熱發生在點頭像的手勢裡；卡片的預熱雖然沒有手勢，但卡片只在 gate 已 `available` 時才注入，`create()` 不會觸發模型下載。
+- 使用者手勢：buddy 的預熱發生在點頭像的手勢裡；卡片與評論頁工具列的預熱雖然沒有手勢，但兩者都只在 gate 已 `available`（工具列另含下載完成的 `done`）時才預熱，`create()` 不會觸發模型下載。
+- 冪等：warm slot 同 key 重複 `warm()` 拿到同一個 in-flight promise，所以注入層先預熱、元件掛載後再預熱一次，不會建出第二個 session。反過來說 `release()` 也要兩邊都有——工具列還沒掛載就換頁時元件的 cleanup 不會跑到，得由注入層的 `unmountToolbar()` 收。
 
 > 測試注意：slot 是模組級狀態，測試的 `afterEach` 要呼叫對應的 `release*()`，否則下一個測試會沿用上一個 stub 建出來的 session。
 
 ---
 
-## 評論潤飾（Rewriter，退回 Prompt API）
+## 評論頁 AI 工具列（Prompt API，潤飾另有 Rewriter 首選路徑）
 
-只在評論撰寫頁（URL 形如 `/order/comment/<id>`）觸發，程式在 [`src/hooks/useReviewRewrite.ts`](../src/hooks/useReviewRewrite.ts) 與 [`src/components/ReviewBuddy.tsx`](../src/components/ReviewBuddy.tsx)。
+只在評論撰寫頁（URL 形如 `/order/comment/<id>`）觸發。注入層在
+[`src/reviewPageToolbar.ts`](../src/reviewPageToolbar.ts)，UI 在
+[`src/components/ReviewToolbar.tsx`](../src/components/ReviewToolbar.tsx)，模型層在
+[`src/lib/reviewAssist.ts`](../src/lib/reviewAssist.ts)、狀態機在
+[`src/hooks/useReviewAssist.ts`](../src/hooks/useReviewAssist.ts)。
 
-- buddy 監看評論 textarea，內容寫滿 45 字才出現「幫我想想」引導提示。
-- [`src/lib/reviewRewrite.ts`](../src/lib/reviewRewrite.ts) 串流潤飾使用者已寫好的內容——只順句、不杜撰。
-- 潤飾結果需使用者按「套用到評論」才寫回 textarea，**不代送**。
-- 以「原文 + 語氣」為快取：原文沒變又按「幫我想想」就沿用上次結果，不重跑模型。但「重新潤飾」會**略過快取**，並在 prompt / Rewriter 的 per-call `context` 追加「換不同句構與用詞」的要求——本機模型重跑常吐出幾乎一樣的句子，不加這個要求使用者會以為按鈕沒反應。
+**這頁刻意不掛小夥伴**（`Buddy` 對評論頁回 `null`，連 consent gate 都不掛）。寫評論的人視線與動線
+都在輸入框，把功能藏在右下角的泡泡裡等於要他先發現一隻寵物、點開、讀完引導才拿得到；四顆按鈕
+直接長在 textarea 下面（`textarea.after(host)`，錨點用 textarea 自己，不綁外層容器的 class）。
 
-### 為什麼有 fallback
+四個動作共用一份 system 指示與同一個 warm slot：
 
-Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**：origin trial 只跑到 Chrome 148 就結束，之後只剩 `chrome://flags/#rewriter-api`（Chrome 151 實測 `typeof Rewriter === 'undefined'`）。一般使用者裝了 extension 也用不到，所以 `generateRewrite()` 分兩條路：
+| 按鈕 | action | 素材 |
+| --- | --- | --- |
+| 潤飾這段 | `polish` | 輸入框現有文字（Rewriter 首選，見下） |
+| 寫不出來？給我開頭 | `opening` | **只有使用者自己在這張表單填過的東西**：商品名、星等、旅伴類別、標題 |
+| 再多寫一點 | `expand` | 輸入框現有文字 |
+| 換個語氣 | `retone` | 輸入框現有文字 + 他當場選的語氣 |
 
-1. **首選 Rewriter**：`typeof Rewriter !== 'undefined'` 且 `availability() !== 'unavailable'`，`create()` 也成功才走。
-2. **退回 Prompt API**（`LanguageModel`，extension 從 Chrome 138 起穩定）：把同一份 `sharedContext()` 當指示送進 `promptStreaming`，另外多要求「只輸出潤飾後的本文」——Rewriter 靠 API 語意就知道輸入是待潤飾的原文，通用模型得講明白。
+- 按鈕開關跟著字數走：一個字都還沒寫時只有 `opening` 能按，寫了 15 字以上才開放其餘三個。
+  不能按的按鈕不是純灰死掉——點下去會說明為什麼現在不行。
+- 產出一律先進結果面板，按「套用到評論」才寫回 textarea，**不代送**。
+- 以「動作 + 原文 + 語氣」為快取；「換一個」會**略過快取**並在 prompt / Rewriter 的 per-call
+  `context` 追加「換不同句構與用詞」的要求——本機模型重跑常吐出幾乎一樣的句子，不加這個要求
+  使用者會以為按鈕沒反應。
+- 語氣**不放進** `create()` 的 system 指示，只放在每次的 prompt 裡。放進 baseline 的話「換個語氣」
+  就得為每個語氣重建一次 session，也換不動已經建好的那份。
+- gate 由工具列自己處理：未就緒時顯示一顆「讓 AI 幫你寫這則評論」（點擊即為 Chrome 要求的下載
+  手勢），下載中顯示進度；裝置/網站不支援時只留一行灰字。商品頁那兩個功能是「gate 沒過就整塊
+  不注入」，這頁不同——沒有 AI 也還是要能寫評論，工具列只佔一行是刻意的。
 
-兩條路底層是同一顆 Gemini Nano，所以 gate 不必為 Rewriter 另開一組判斷：modelGate 放行（base model 就緒）就至少有一條路能跑。
+### 真實性的底線
 
-一個刻意的取捨：**只在 availability / `create()` 階段才退回**。一旦開始串流，UI 上已經有文字，這時再換 Prompt API 重跑會讓畫面整段跳掉，所以直接讓錯誤浮到 UI。
+評論會公開給其他旅客看，所以 system 指示明講「不要新增他沒提到的細節、地點、數字或感受」。
+`opening` 是唯一會無中生有的動作，因此它的素材被限制在使用者自己填過的欄位，而且
+[`contextLines()`](../src/lib/reviewAssist.ts) **只列有填的欄位**——空欄位若也寫進 prompt，
+模型會自作主張把它補滿。指示裡也明講「不要編天氣、排隊、服務、行程內容」。
+
+### 為什麼 polish 還留著 Rewriter
+
+Rewriter API 語意最貼合「潤飾」，但它**沒有進 Chrome 穩定版**：origin trial 只跑到 Chrome 148 就
+結束，之後只剩 `chrome://flags/#rewriter-api`（Chrome 151 實測 `typeof Rewriter === 'undefined'`）。
+一般使用者裝了 extension 也用不到，所以 `generateAssist()` 對 `polish` 分兩條路：
+
+1. **首選 Rewriter**：`typeof Rewriter !== 'undefined'` 且 `availability() !== 'unavailable'`，
+   `create()` 也成功才走。
+2. **退回 Prompt API**（`LanguageModel`，extension 從 Chrome 138 起穩定）：把同一份 system 指示
+   加上語氣送進 `promptStreaming`。
+
+其餘三個動作沒有對應的 API 語意，一律走 Prompt API。兩條路底層是同一顆 Gemini Nano，所以 gate
+不必為 Rewriter 另開一組判斷：modelGate 放行（base model 就緒）就至少有一條路能跑。
+
+一個刻意的取捨：**只在 availability / `create()` 階段才退回**。一旦開始串流，UI 上已經有文字，
+這時再換 Prompt API 重跑會讓畫面整段跳掉，所以直接讓錯誤浮到 UI。
 
 ---
 
@@ -251,5 +289,5 @@ Chrome extension 難測的點在於：真正的環境（真實網站 DOM + 真�
 
 - **真實 AI API 永遠不進 CI。** 需要模型下載（22GB 空間）、硬體門檻、且輸出不決定性。demo 層的 stub 才是決定性的，適合自動化。
 - **demo 頁負責「降級路徑」。** 評論頁的 `?api=` 參數可以模擬「只有 LanguageModel」（＝一般使用者的真實情況）、「Rewriter 也在」、「兩個都沒有」三種環境，不必真的去改 `chrome://flags` 或換機器。這類環境相依的 bug（例如 Rewriter 沒進穩定版）看程式碼是看不出來的。
-- **框架綁定要有「會變紅」的監控。** demo 評論頁上那塊「框架 state」是刻意做的：它模擬 Nuxt(Vue) 的 `v-model` 只在收到 `input` 事件時才同步自己的 state，而「送出」送的是 state 而不是 `el.value`。[`writeReviewDraft()`](../src/lib/reviewPage.ts) 的 native setter + dispatch event 就是為了餵這個綁定——哪天少了派發事件那一步，那塊會變紅並顯示送出去的是舊值。jsdom 沒有框架，所以單元測試對這個失敗模式永遠是綠的。
-- **selector 是最脆弱的地方。** [`getReviewTextarea()`](../src/lib/reviewPage.ts) 目前用「placeholder 關鍵字 → 退回第一個 textarea」的通用寫法。要真正防漂移，得把真實評論頁的 DOM 片段存成 fixture 讓單元測試對它跑（尚未做，需要登入的訂單頁才抓得到）。
+- **框架綁定要有「會變紅」的監控。** demo 評論頁上那塊「框架 state」是刻意做的：它模擬「只在收到 `input` 事件時才同步自己的 state」的雙向綁定，而「送出」送的是 state 而不是 `el.value`。[`writeReviewDraft()`](../src/lib/reviewPage.ts) 的 native setter + dispatch event 就是為了餵這個綁定——哪天少了派發事件那一步，那塊會變紅並顯示送出去的是舊值。jsdom 沒有框架，所以單元測試對這個失敗模式永遠是綠的。
+- **selector 是最脆弱的地方。** [`getReviewTextarea()`](../src/lib/reviewPage.ts) 用「placeholder 關鍵字 → 退回第一個 textarea」的通用寫法；[`readReviewContext()`](../src/lib/reviewPage.ts) 走的是語意線索——商品名認 `a[href*="/product/"]` 底下的標題，其餘認表單欄位 `name`（`recScore` / `travellerType` / `recTitle`），不綁樣式 class。`demo/review.html` 的結構就是照實機（jQuery + Bootstrap 的舊頁）抄的，改壞了那些選擇器「給我開頭」會拿不到素材。要真正防漂移，得把真實評論頁的 DOM 片段存成 fixture 讓單元測試對它跑（尚未做，需要登入的訂單頁才抓得到）。

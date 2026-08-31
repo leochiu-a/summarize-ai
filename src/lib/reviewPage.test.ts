@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getReviewTextarea,
   isReviewPage,
+  readReviewContext,
   readReviewDraft,
+  reviewDraftLimit,
   watchReviewDraft,
   writeReviewDraft,
 } from './reviewPage'
@@ -124,5 +126,67 @@ describe('watchReviewDraft', () => {
 
     stop()
     vi.useRealTimers()
+  })
+})
+
+describe('reviewDraftLimit', () => {
+  it('讀輸入框自己的 maxlength；沒設回 null', () => {
+    const el = seedTextarea()
+    expect(reviewDraftLimit()).toBeNull()
+    el.maxLength = 900
+    expect(reviewDraftLimit()).toBe(900)
+  })
+})
+
+describe('writeReviewDraft 的字數上限', () => {
+  it('超過 maxlength 的部分先截掉（程式寫入不受 maxlength 限制，留著只會在送出時才爆）', () => {
+    const el = seedTextarea()
+    el.maxLength = 10
+    writeReviewDraft('一'.repeat(30))
+    expect(el.value).toHaveLength(10)
+  })
+})
+
+describe('readReviewContext', () => {
+  // 對齊實機評論頁：商品名在連到 /product/<id> 的標題裡，其餘走表單欄位 name
+  function seedForm(): void {
+    document.body.innerHTML = `
+      <a href="https://www.kkday.com/zh-tw/product/18940"><div><h2> HARUKA 車票 </h2></div></a>
+      <ul name="recScore">
+        <li><i class="fa fa-star text-primary"></i></li>
+        <li><i class="fa fa-star text-primary"></i></li>
+        <li><i class="fa fa-star text-primary"></i></li>
+        <li><i class="fa fa-star-o"></i></li>
+        <li><i class="fa fa-star-o"></i></li>
+      </ul>
+      <input name="travellerType" type="radio" value="情侶" />
+      <input name="travellerType" type="radio" value="家人" checked />
+      <input name="recTitle" value="很順的機場交通" />
+    `
+  }
+
+  it('讀得到商品名、星等、旅伴類別與標題', () => {
+    seedForm()
+    expect(readReviewContext()).toEqual({
+      productName: 'HARUKA 車票',
+      rating: 3, // 實心星的顆數
+      travellerType: '家人',
+      title: '很順的機場交通',
+    })
+  })
+
+  it('星等優先信元件自己寫的 data-validate-value（實心星是後備）', () => {
+    seedForm()
+    document.querySelector('[name="recScore"]')!.setAttribute('data-validate-value', '5')
+    expect(readReviewContext().rating).toBe(5)
+  })
+
+  it('什麼都沒填時回空值，不亂猜', () => {
+    expect(readReviewContext()).toEqual({
+      productName: '',
+      rating: null,
+      travellerType: '',
+      title: '',
+    })
   })
 })

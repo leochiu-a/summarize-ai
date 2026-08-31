@@ -1,6 +1,6 @@
 # Summarize AI Buddy
 
-> 在 [kkday.com](https://kkday.com) 右下角召喚一個 pixel 小夥伴，用 **Chrome 內建 AI** 幫你摘要頁面、看懂商品、潤飾評論、翻譯評論、判斷值不值得買。小夥伴的功能全程本機運算、內容不上傳；另外有一層實驗性的 [WebMCP tool](#另一條實驗性的路webmcp-tool) 走的是相反方向——把頁面能力開放給你自己帶來的 agent。
+> 在 [kkday.com](https://kkday.com) 右下角召喚一個 pixel 小夥伴，用 **Chrome 內建 AI** 幫你摘要頁面、看懂商品、翻譯評論、判斷值不值得買；寫評論時它退到一邊，改在輸入框下面給你四顆按鈕。全程本機運算、內容不上傳；另外有一層實驗性的 [WebMCP tool](#另一條實驗性的路webmcp-tool) 走的是相反方向——把頁面能力開放給你自己帶來的 agent。
 
 一個 Chrome MV3 擴充套件，只在 `kkday.com`（含子網域）上運作，把 Chrome 內建的 Gemini Nano（Summarizer / Prompt / Rewriter / Translator API）包成幾個貼著 KKday 使用情境的小功能。
 
@@ -11,12 +11,12 @@
 | **頁面摘要** | 全站每頁 | 點右下角小夥伴展開泡泡，按「幫我摘要這頁」把整頁內容摘要成一段泡泡；串流輸出時嘴巴會動。語氣、摘要類型可在 popup 調。 | Summarizer |
 | **商品重點摘要卡片** | 商品頁 `/product/<id>` | 在「商品說明」標題下方自動插入一張卡片，按「產生 AI 摘要」用一段話說明「這是什麼商品、適合哪種旅客」，視覺對齊 KKday 原生 AI 評論摘要框。 | Prompt（`LanguageModel`）|
 | **值不值得買** | 商品頁 | 點小夥伴展開泡泡，按「幫我看值不值得」，綜合評分、價格、折扣券等給「結論先行 + 短理由」的購買建議。 | Prompt（`LanguageModel`）|
-| **評論潤飾** | 評論撰寫頁 `/order/comment/<id>` | 你寫好評論後，小夥伴幫你順句、潤飾（只順句、不杜撰）；要按「套用」才寫回，不代送。 | Rewriter，不可用時退回 Prompt |
+| **評論頁 AI 工具列** | 評論撰寫頁 `/order/comment/<id>` | 評論輸入框下方直接長出四顆按鈕：**潤飾這段**、**寫不出來？給我開頭**（只用你自己填的商品、星等、旅伴類別當素材）、**再多寫一點**、**換個語氣**。產出先顯示在下方，按「套用」才寫回，不代送。這頁不出現小夥伴。 | Rewriter（潤飾）／Prompt |
 | **翻譯所有評論** | 商品頁評論區 | 一鍵把非你語系的評論就地翻成你的語言，可切換原文 / 譯文。 | Translator + LanguageDetector |
 
 第一次用到某個模型時，小夥伴會先徵求同意再下載 Gemini Nano，並顯示下載進度（Chrome 要求模型下載必須由使用者手勢觸發）。
 
-上面三個用 Gemini Nano 的功能都是「**打開只展開，按鈕才跑**」：打開的那一刻只在背景把模型載進記憶體（預熱），按下按鈕時 cold start 已經被吃掉；半小時 / 24 小時內有快取則打開就直接顯示上次結果，連按鈕都不用。理由與作法見 [ARCHITECTURE 的〈預熱與 session 生命週期〉](docs/ARCHITECTURE.md#預熱與-session-生命週期)。
+用 Gemini Nano 的功能都是「**先預熱，按鈕才跑**」：打開泡泡 / 卡片出現 / 走進評論頁的那一刻只在背景把模型載進記憶體，按下按鈕時 cold start 已經被吃掉；半小時 / 24 小時內有快取則打開就直接顯示上次結果，連按鈕都不用。理由與作法見 [ARCHITECTURE 的〈預熱與 session 生命週期〉](docs/ARCHITECTURE.md#預熱與-session-生命週期)。
 
 右下角小夥伴在窄螢幕（手機寬度、或視窗窄到跟手機差不多）**不會顯示**——內建 AI 本來就不支援 mobile，浮動頭像在窄版排版只會擋內容。商品頁卡片等注入到版面裡的功能不受影響。
 
@@ -141,13 +141,13 @@ pnpm demo
 | --- | --- |
 | `/` | 文章頁（整頁摘要） |
 | `/homepage` | 非文章頁（框架垃圾過濾） |
-| `/order/comment/25KK268720222` | 評論撰寫頁（潤飾）。`?api=prompt`（預設，走 Prompt fallback）/ `?api=rewriter` / `?api=none` 可切換 stub 的 API 組合 |
+| `/order/comment/25KK268720222` | 評論撰寫頁（AI 工具列），結構照實機抄。`?api=prompt`（預設，走 Prompt fallback）/ `?api=rewriter` / `?api=none` 可切換 stub 的 API 組合；`?gate=consent` 走「同意下載 → 進度」那條路 |
 | `/zh-tw/product/12319` | 商品頁 + **WebMCP tool 檢視器**。列出註冊到的 tool，可直接執行看真實輸出與字元數；沒有原生 `document.modelContext` 時自動裝一份最小 polyfill |
 | `/probe` | **不 stub 任何東西**，列出這台機器上各內建 AI API 的真實 `availability()`。查「為什麼我這裡不能用」先看這頁 |
 
 要用 server 而不是直接開檔案，是因為頁面偵測比對 `location.pathname`，`file://` 做不出那個形狀。開發時另一個 terminal 跑 `pnpm dev`（watch build），改完存檔重新整理即可（server 一律回 `no-store`、直接讀 `dist/`）。server 已經在跑的話用 `pnpm demo:serve` 跳過 build。
 
-評論頁上那塊「框架 state」是刻意做的，用來抓 jsdom 測不到的 Nuxt 雙向綁定失敗（原理見 [ARCHITECTURE 的測試策略](docs/ARCHITECTURE.md#測試策略)）。
+評論頁上那塊「框架 state」是刻意做的，用來抓 jsdom 測不到的雙向綁定失敗（原理見 [ARCHITECTURE 的測試策略](docs/ARCHITECTURE.md#測試策略)）。
 
 ## 專案結構
 
@@ -158,8 +158,8 @@ public/            MV3 manifest、sprite、emoji 等資產（原樣複製進 dis
 src/               content script 進入點、小夥伴編排（Buddy / content.tsx）
 src/webmcp.ts      WebMCP 註冊層進入點（獨立 bundle，跑在 MAIN world）
 src/webmcp/        WebMCP 的型別宣告（@types/dom-chromium-ai 不含 modelContext）
-src/components/    UI 元件：各 buddy、商品摘要卡片、翻譯按鈕、頭像 / 反應列
-src/hooks/         流程與狀態機：摘要、商品摘要、值不值得、評論潤飾 / 翻譯、model gate、設定
+src/components/    UI 元件：各 buddy、商品摘要卡片、評論頁工具列、翻譯按鈕、頭像 / 反應列
+src/hooks/         流程與狀態機：摘要、商品摘要、值不值得、評論工具列 / 翻譯、model gate、設定
 src/lib/           資料層：內容擷取、商品 / 評論頁偵測、各 AI API 包裝、快取、設定
 src/popup/         設定頁面（獨立 extension 頁面，非 Shadow DOM）
 demo/              免安裝本機預覽頁（含 AI API 探測頁）

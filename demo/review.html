@@ -5,15 +5,25 @@
 <title>評論撰寫頁 — Demo</title>
 <style>
   body { font-family: -apple-system, "PingFang TC", sans-serif; max-width: 720px; margin: 40px auto; line-height: 1.7; color: #222; padding: 0 20px; }
-  h1 { font-size: 22px; margin-bottom: 4px; }
+  h1 { font-size: 20px; margin: 24px 0 8px; }
+  h2 { font-size: 18px; margin: 0; }
   .order { color: #888; font-size: 14px; margin-bottom: 24px; }
-  textarea { width: 100%; min-height: 160px; padding: 12px; font: inherit; line-height: 1.7; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
+  label { display: block; font-size: 14px; margin-bottom: 6px; }
+  .form-group { margin-bottom: 20px; }
+  .form-control { width: 100%; padding: 10px 12px; font: inherit; line-height: 1.7; border: 1px solid #ccc; border-radius: 8px; }
+  textarea.form-control { min-height: 160px; resize: vertical; }
+  .rating { list-style: none; padding: 0; display: flex; gap: 4px; cursor: pointer; }
+  .rating i { font-style: normal; font-size: 24px; color: #ccc; }
+  .rating i.fa-star { color: #ffb400; }
+  .btn-group label { display: inline-block; margin: 0 6px 0 0; padding: 6px 14px; border: 1px solid #ccc; border-radius: 999px; cursor: pointer; }
+  .btn-group label.active { border-color: #ff4f4f; color: #ff4f4f; }
+  .btn-group input { display: none; }
   .submit { margin-top: 12px; padding: 10px 24px; font: inherit; border: 0; border-radius: 6px; background: #ff4f4f; color: #fff; cursor: pointer; }
   .mirror { margin-top: 28px; padding: 12px 16px; background: #f6f6f6; border-left: 3px solid #999; border-radius: 4px; font-size: 13px; }
-  .mirror h2 { font-size: 13px; margin: 0 0 6px; color: #666; }
+  .mirror h3 { font-size: 13px; margin: 0 0 6px; color: #666; }
   .mirror pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #333; }
   .stale { border-left-color: #d33; background: #fff2f2; }
-  .stale h2 { color: #d33; }
+  .stale h3 { color: #d33; }
   .badge { position: fixed; top: 12px; left: 12px; font-size: 12px; background: #222; color: #fff; padding: 6px 10px; border-radius: 6px; font-family: ui-monospace, monospace; }
   .badge a { color: #7fd; }
 </style>
@@ -22,27 +32,83 @@
 
 <div class="badge" id="badge"></div>
 
-<h1>為「東京晴空塔門票」留下評論</h1>
+<!--
+  結構對齊實機 /order/comment/<id>（jQuery + Bootstrap 的舊頁）：
+  商品名在連到 /product/<id> 的標題裡、評分是 ul[name=recScore]、旅伴是 input[name=travellerType]、
+  標題是 input[name=recTitle]、內文是 #recDesc（maxlength 900）。
+  readReviewContext() 就是照這些語意線索抓資料，改壞了「給我開頭」會拿不到素材。
+-->
+<a href="https://www.kkday.com/zh-tw/product/18940"><div class="order-card-title"><h2>日本關西機場 KIX 機場快線 HARUKA 車票</h2></div></a>
 <div class="order">訂單編號 25KK268720222 · 2026/07/20 出發</div>
 
-<!-- placeholder 要和真實頁面一致：getReviewTextarea() 靠關鍵字（體驗/想法/評論/感想）認框 -->
-<textarea id="draft" placeholder="你覺得這次體驗如何呢？請告訴我們"></textarea>
+<h1>請給這次體驗打個分數吧！(最高5顆星)</h1>
+<div class="form-group">
+  <ul class="rating list-unstyled" name="recScore">
+    <li class="rating-star"><i class="fa fa-star-o"></i></li>
+    <li class="rating-star"><i class="fa fa-star-o"></i></li>
+    <li class="rating-star"><i class="fa fa-star-o"></i></li>
+    <li class="rating-star"><i class="fa fa-star-o"></i></li>
+    <li class="rating-star"><i class="fa fa-star-o"></i></li>
+  </ul>
+</div>
+
+<div class="form-group">
+  <label>這次旅行你是屬於哪種類別呢</label>
+  <div data-toggle="buttons" class="btn-group">
+    <label class="btn"><input name="travellerType" type="radio" value="情侶">情侶</label>
+    <label class="btn"><input name="travellerType" type="radio" value="家人">家人</label>
+    <label class="btn"><input name="travellerType" type="radio" value="好友">好友</label>
+    <label class="btn"><input name="travellerType" type="radio" value="單人旅遊">單人旅遊</label>
+    <label class="btn"><input name="travellerType" type="radio" value="商務旅客">商務旅客</label>
+  </div>
+</div>
+
+<div class="form-group">
+  <label>評論標題</label>
+  <input name="recTitle" class="form-control" placeholder="請輸入標題">
+</div>
+
+<div class="form-group">
+  <label>告訴我們你的想法</label>
+  <!-- placeholder 要和真實頁面一致：getReviewTextarea() 靠關鍵字（體驗/想法/評論/感想）認框 -->
+  <textarea id="recDesc" name="recDesc" rows="5" maxlength="900" class="form-control" placeholder="你覺得這次體驗如何呢？請告訴我們"></textarea>
+</div>
+
 <button class="submit" id="submit">送出評論</button>
 
 <!--
-  模擬 Nuxt(Vue) v-model 的行為，用來驗 writeReviewDraft() 的關鍵契約：
+  模擬框架接管輸入框的行為，用來驗 writeReviewDraft() 的關鍵契約：
   框架只在收到 input 事件時才同步自己那份 state，「送出」送的是 state 而不是 el.value。
   如果哪天 writeReviewDraft 只改了 .value 卻沒 dispatch 事件，下面這塊就會變紅、
   顯示送出去的還是舊值——這個失敗模式在 jsdom 單元測試裡永遠是綠的。
 -->
 <div class="mirror" id="mirror">
-  <h2>框架 state（模擬 Vue v-model —— 送出時真正會送的值）</h2>
+  <h3>框架 state（送出時真正會送的值）</h3>
   <pre id="mirrorText">（空）</pre>
 </div>
 
 <script>
+// ── 星等：點一下填到那一顆，並把結果寫進 data-validate-value（實機的驗證元件就是這樣做） ──
+const ratingList = document.querySelector('ul.rating')
+;[...ratingList.children].forEach((li, idx) => {
+  li.addEventListener('click', () => {
+    ratingList.setAttribute('data-validate-value', String(idx + 1))
+    ;[...ratingList.children].forEach((node, i) => {
+      node.querySelector('i').className = i <= idx ? 'fa fa-star' : 'fa fa-star-o'
+    })
+  })
+})
+
+// ── 旅伴類別：Bootstrap 的 data-toggle="buttons" 行為 ──
+document.querySelectorAll('.btn-group input').forEach((input) => {
+  input.addEventListener('change', () => {
+    document.querySelectorAll('.btn-group label').forEach((l) => l.classList.remove('active'))
+    input.parentElement.classList.add('active')
+  })
+})
+
 // ── 模擬框架的雙向綁定 ───────────────────────────────────────────
-const draft = document.getElementById('draft')
+const draft = document.getElementById('recDesc')
 const mirror = document.getElementById('mirror')
 const mirrorText = document.getElementById('mirrorText')
 let model = '' // 框架自己那份 state，只有 input 事件會更新它
@@ -75,22 +141,34 @@ window.chrome = window.chrome || {}
 chrome.runtime = { getURL: (p) => '/' + p }
 
 // ── stub 內建 AI ────────────────────────────────────────────────
-// ?api=prompt（預設）→ 只有 LanguageModel，走 fallback 那條路（＝一般使用者的真實情況）
-// ?api=rewriter      → Rewriter 也在，走首選那條路
-// ?api=none          → 兩個都沒有，看錯誤狀態長怎樣
-const api = new URLSearchParams(location.search).get('api') || 'prompt'
+// ?api=prompt（預設）→ 只有 LanguageModel，四個動作全走這條（＝一般使用者的真實情況）
+// ?api=rewriter      → Rewriter 也在，「潤飾這段」走首選那條路
+// ?api=none          → 兩個都沒有，看不可用時的說法
+// ?gate=consent      → LanguageModel 回 downloadable，看「啟用」→ 下載進度的流程
+const params = new URLSearchParams(location.search)
+const api = params.get('api') || 'prompt'
+const gate = params.get('gate') || 'ready'
 
-// 每次呼叫換一種寫法，讓「重新潤飾」的效果在畫面上看得出來；
+// 每次呼叫換一種寫法，讓「換一個」的效果在畫面上看得出來；
 // 同時把有沒有收到「換個說法」的要求標在輸出裡，方便驗 rephrase 有沒有真的傳下去。
 let nth = 0
-function fakeRewrite(draftText, rephraseHintSeen) {
+function fakeOutput(prompt) {
+  nth++
+  const rephrased = prompt.includes('請換不同的句構與用詞')
+  const mark = rephrased ? '（收到「換個說法」的要求 ✅）' : ''
+  // opening 沒有原文，餵的是表單資訊；其餘動作都以「使用者原文：」結尾
+  if (prompt.includes('他填的資訊：')) {
+    const facts = prompt.split('他填的資訊：\n').pop().replace(/\n/g, '、')
+    return `【第 ${nth} 版・開頭草稿】這次的行程是 ${facts}。整體來說還算順利，`
+      + `其他細節我再補充：${mark}`
+  }
+  const body = (prompt.split('使用者原文：\n').pop() || '').replace(/[。\s]+$/, '')
   const variants = [
     (t) => `【第 ${nth} 版】${t}。整體來說是不錯的體驗，推薦給大家。`,
     (t) => `【第 ${nth} 版・換個說法】說真的，${t}。如果你也在考慮，我會說值得一試。`,
     (t) => `【第 ${nth} 版・再換一次】${t}。總結一下：喜歡這種行程的人應該不會失望。`,
   ]
-  const body = variants[(nth - 1) % variants.length](draftText.replace(/[。\s]+$/, ''))
-  return body + (rephraseHintSeen ? '（收到「換個說法」的要求 ✅）' : '')
+  return variants[(nth - 1) % variants.length](body) + mark
 }
 
 function streamText(text, firstDelay = 900, chunkDelay = 40) {
@@ -107,39 +185,49 @@ function streamText(text, firstDelay = 900, chunkDelay = 40) {
   }
 }
 
-const REPHRASE_MARK = '請換不同的句構與用詞'
-
 if (api !== 'none') {
+  const session = {
+    promptStreaming: (prompt) => streamText(fakeOutput(prompt)),
+    clone: async () => session, // warm slot 每次執行都 clone 一份 baseline
+    destroy() {},
+  }
   window.LanguageModel = {
-    availability: async () => 'available',
-    create: async () => ({
-      promptStreaming: (prompt) => {
-        nth++
-        // prompt 尾端是「使用者原文：\n<draft>」
-        const body = prompt.split('使用者原文：\n').pop() || ''
-        return streamText(fakeRewrite(body, prompt.includes(REPHRASE_MARK)))
-      },
-      destroy() {},
-    }),
+    availability: async () => (gate === 'consent' ? 'downloadable' : 'available'),
+    create: async (opts) => {
+      // 帶 monitor 的 create = consent gate 在下載模型，餵幾格進度給進度條
+      if (opts && opts.monitor) {
+        opts.monitor({
+          addEventListener: (type, cb) => {
+            if (type !== 'downloadprogress') return
+            ;[0.2, 0.6, 1].forEach((loaded, i) => setTimeout(() => cb({ loaded }), 400 * (i + 1)))
+          },
+        })
+        await new Promise((r) => setTimeout(r, 1400))
+      }
+      return session
+    },
   }
 }
 
 if (api === 'rewriter') {
   window.Rewriter = {
     availability: async () => 'available',
-    create: async () => ({
-      rewriteStreaming: (input, opts) => {
-        nth++
-        return streamText(fakeRewrite(input, (opts?.context || '').includes(REPHRASE_MARK)))
-      },
+    create: async (opts) => ({
+      rewriteStreaming: (input, callOpts) =>
+        streamText(fakeOutput(`${(callOpts && callOpts.context) || ''}\n使用者原文：\n${input}`)),
       destroy() {},
     }),
   }
 }
 
-const label = { prompt: 'LanguageModel only（fallback 路徑）', rewriter: 'Rewriter 可用（首選路徑）', none: '兩個 API 都沒有（錯誤狀態）' }
+const label = {
+  prompt: 'LanguageModel only（fallback 路徑）',
+  rewriter: 'Rewriter 可用（潤飾走首選路徑）',
+  none: '兩個 API 都沒有（不可用的說法）',
+}
 document.getElementById('badge').innerHTML =
-  `stub：${label[api]} · 切換 <a href="?api=prompt">prompt</a> / <a href="?api=rewriter">rewriter</a> / <a href="?api=none">none</a>`
+  `stub：${label[api]} · 切換 <a href="?api=prompt">prompt</a> / <a href="?api=rewriter">rewriter</a> / `
+  + `<a href="?api=none">none</a> · <a href="?gate=consent">consent 流程</a>`
 </script>
 <script src="/content.js"></script>
 </body>

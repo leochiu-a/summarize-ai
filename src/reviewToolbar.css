@@ -1,0 +1,180 @@
+/* 評論頁 AI 工具列的 Shadow DOM 樣式（隔離宿主頁面 CSS）。 */
+/* 視覺沿用另外兩個注入功能的語彙：淡青底、青→藍漸層、Noto Sans TC， */
+/* 但刻意比表單本身輕——它長在輸入框下面，是輔助，不該搶送出按鈕的戲。 */
+
+:host {
+  all: initial;
+  display: block;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.rt {
+  margin: 8px 0 4px;
+  font-family: "Noto Sans TC", -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #212121;
+}
+
+.rt-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 一顆按鈕 = 淡青底圓角膠囊 + 青字（一排四顆，漸層文字太吵，留給主要按鈕用） */
+.rt-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f0fbfd;
+  border-radius: 999px;
+  padding: 6px 14px;
+  transition: background 0.12s ease, transform 0.12s ease;
+  background-clip: padding-box;
+}
+.rt-btn:hover {
+  background: #e4f7fb;
+}
+.rt-btn:active {
+  transform: scale(0.98);
+}
+.rt-btn:focus-visible {
+  outline: 2px solid #2ec4f2;
+  outline-offset: 2px;
+}
+.rt-btn[disabled] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.rt-btn,
+.rt-tone {
+  color: #0f7d95;
+}
+
+.rt-btn--primary {
+  background: linear-gradient(90deg, #10d5e3, #2ec4f2 50%, #4daaf7);
+  color: #fff;
+}
+.rt-btn--primary:hover {
+  background: linear-gradient(90deg, #0cc4d2, #23b8e6 50%, #3f9df0);
+}
+.rt-btn--ghost {
+  background: transparent;
+  color: #6b7a80;
+}
+.rt-btn--ghost:hover {
+  background: #f3f5f6;
+}
+/* 現在按了也沒意義（字數不夠 / 已經有內容）：壓低但仍可點，點下去會說明為什麼 */
+.rt-btn--off {
+  opacity: 0.55;
+}
+
+.rt-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 12px;
+  color: #8a969b;
+}
+
+.rt-tones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.rt-tone {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  background: #f6f7f8;
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.rt-tone:hover {
+  background: #e9eef0;
+}
+.rt-tone:focus-visible {
+  outline: 2px solid #2ec4f2;
+  outline-offset: 2px;
+}
+
+/* 結果面板：候選文字待確認，套用前不碰輸入框 */
+.rt-result {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #f0fbfc, #f2faff);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.rt-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f7d95;
+  margin-bottom: 6px;
+}
+.rt-dots {
+  font-weight: 400;
+  color: #8a969b;
+}
+.rt-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  min-height: 1.7em;
+}
+.rt-result-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rt-notice {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8a969b;
+}
+.rt-error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #b45309;
+}
+
+/* emoji：預設靜態 SVG，hover 才播動畫 webp（與其他元件同一機制） */
+.emoji-static,
+.emoji-anim {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex: none;
+}
+.emoji-anim {
+  display: none;
+}
+.rt-btn:hover .emoji-static,
+.rt-tone:hover .emoji-static {
+  display: none;
+}
+.rt-btn:hover .emoji-anim,
+.rt-tone:hover .emoji-anim {
+  display: block;
+}

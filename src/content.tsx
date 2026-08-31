@@ -1,6 +1,7 @@
 // Summarize AI Buddy — content script 進入點
-// 1) 右下角 pixel 小夥伴（全站，點擊摘要整頁）
-// 2) 商品頁專屬：在「商品說明」下方注入 AI 摘要卡片 → 見 productPageSummary.tsx
+// 1) 右下角 pixel 小夥伴（全站，點擊摘要整頁；評論撰寫頁不出現）
+// 2) 商品頁專屬：在「商品說明」下方注入 AI 摘要卡片 → 見 productPageSummary.ts
+// 3) 評論撰寫頁專屬：在評論輸入框下方注入 AI 按鈕 → 見 reviewPageToolbar.ts
 
 import { createRoot } from 'react-dom/client'
 import overlayScrollbarsStyles from 'overlayscrollbars/overlayscrollbars.css?inline'
@@ -11,6 +12,7 @@ import { isHostDisabled } from './lib/disabledSites'
 import { refreshGeminiNano } from './lib/modelGate'
 import { startProductPageReviews } from './productPageReviews'
 import { startProductPageSummary } from './productPageSummary'
+import { startReviewPageToolbar } from './reviewPageToolbar'
 
 async function main() {
   // 使用者在 popup 的「停用清單」針對這個 hostname 關掉 AI 功能 → 什麼都不掛載，直接退出。
@@ -35,6 +37,11 @@ async function main() {
 
   document.documentElement.appendChild(host)
   createRoot(mount).render(<Buddy />)
+
+  // ── 評論撰寫頁專屬：輸入框下方的 AI 按鈕 ──────────────────────
+  // 刻意不排在 gate 校正後面：這頁的 gate 由工具列自己處理（未就緒顯示「啟用」按鈕），
+  // 排隊等校正只會延後按鈕出現、也延後預熱。它自己會等 gate 廣播再預熱（見 reviewPageToolbar）。
+  startReviewPageToolbar()
 
   // ── Gemini Nano consent gate：先校正一次可用狀態，填好同步快取 ──────
   // 注入層（商品摘要卡片）會用同步快取決定「建立 UI 之前」要不要顯示（零閃現）；
